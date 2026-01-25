@@ -31,7 +31,8 @@ export class NotificationAdminService extends BaseService {
     try {
       await this.emailRepository.verifySmtp(dto.transport);
     } catch (error) {
-      throw new BadRequestException('Failed to verify SMTP configuration', { cause: error });
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException(`Failed to verify SMTP configuration: ${message}`, { cause: error });
     }
 
     const { server } = await this.getConfig({ withCache: false });

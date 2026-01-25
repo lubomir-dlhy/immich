@@ -41,10 +41,10 @@ describe(NotificationService.name, () => {
 
     it('should throw error if smtp validation fails', async () => {
       mocks.user.get.mockResolvedValue(userStub.admin);
-      mocks.email.verifySmtp.mockRejectedValue('');
+      mocks.email.verifySmtp.mockRejectedValue(new Error('Connection timed out'));
 
       await expect(sut.sendTestEmail('', smtpTransport.notifications.smtp)).rejects.toThrow(
-        'Failed to verify SMTP configuration',
+        'Failed to verify SMTP configuration: Connection timed out',
       );
     });
 

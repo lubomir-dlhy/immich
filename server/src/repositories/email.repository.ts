@@ -105,10 +105,33 @@ export class EmailRepository {
   }
 
   async verifySmtp(options: SmtpOptions): Promise<true> {
+    const safeOpts = {
+      host: options.host,
+      port: options.port,
+      secure: options.secure,
+      username: options.username ?? '(none)',
+      password: options.password ? '********' : '(none)',
+      ignoreCert: options.ignoreCert,
+    };
+    this.logger.log(`Verifying SMTP connection to ${options.host}:${options.port} (secure=${options.secure})`);
+    this.logger.debug(`SMTP options: ${JSON.stringify(safeOpts)}`);
+
     const transport = this.createTransport(options);
     try {
-      await transport.verify(); // <-- crucial
+      await transport.verify();
+      this.logger.log(`SMTP verification successful for ${options.host}:${options.port}`);
       return true;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const details = [
+        err.message,
+        (err as NodeJS.ErrnoException).code && `code=${(err as NodeJS.ErrnoException).code}`,
+        (err as NodeJS.ErrnoException).errno !== undefined && `errno=${(err as NodeJS.ErrnoException).errno}`,
+      ]
+        .filter(Boolean)
+        .join(', ');
+      this.logger.error(`SMTP verification failed for ${options.host}:${options.port}: ${details}`, err.stack);
+      throw error;
     } finally {
       transport.close();
     }
@@ -159,9 +182,13 @@ export class EmailRepository {
   }
 
   private createTransport(options: SmtpOptions) {
+    const port = options.port ?? (options.secure ? 465 : 587);
+    const secure = options.secure ?? port === 465;
     return createTransport({
       host: options.host,
-      port: options.port,
+      port,
+      secure,
+      requireTLS: !secure && port === 587,
       tls: { rejectUnauthorized: !options.ignoreCert },
       auth:
         options.username || options.password
@@ -170,10 +197,10 @@ export class EmailRepository {
               pass: options.password,
             }
           : undefined,
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 5000,
-      dnsTimeout: 5000,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
+      dnsTimeout: 10_000,
     });
   }
 }
