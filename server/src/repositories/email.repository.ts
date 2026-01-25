@@ -104,10 +104,11 @@ export class EmailRepository {
     this.logger.setContext(EmailRepository.name);
   }
 
-  verifySmtp(options: SmtpOptions): Promise<true> {
+  async verifySmtp(options: SmtpOptions): Promise<true> {
     const transport = this.createTransport(options);
     try {
-      return transport.verify();
+      await transport.verify(); // <-- crucial
+      return true;
     } finally {
       transport.close();
     }
@@ -170,6 +171,9 @@ export class EmailRepository {
             }
           : undefined,
       connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
+      dnsTimeout: 5000,
     });
   }
 }
