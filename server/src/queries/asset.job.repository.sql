@@ -116,8 +116,22 @@ where
   "asset"."deletedAt" is null
   and "asset"."visibility" != $1
   and (
-    "asset_job_status"."previewAt" is null
-    or "asset_job_status"."thumbnailAt" is null
+    not exists (
+      select
+      from
+        "asset_file"
+      where
+        "assetId" = "asset"."id"
+        and "asset_file"."type" = $2
+    )
+    or not exists (
+      select
+      from
+        "asset_file"
+      where
+        "assetId" = "asset"."id"
+        and "asset_file"."type" = $3
+    )
     or "asset"."thumbhash" is null
   )
 
@@ -165,11 +179,13 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
-          "asset_file"."isEdited"
+          "asset_file"."isEdited",
+          "asset_file"."isProgressive"
         from
           "asset_file"
         where
           "asset_file"."assetId" = "asset"."id"
+          and "asset_file"."type" in ($1, $2, $3)
       ) as agg
   ) as "files",
   (
@@ -191,7 +207,7 @@ from
   "asset"
   inner join "asset_exif" on "asset"."id" = "asset_exif"."assetId"
 where
-  "asset"."id" = $1
+  "asset"."id" = $4
 
 -- AssetJobRepository.getForMetadataExtraction
 select
@@ -290,7 +306,14 @@ from
 where
   "asset"."visibility" != $1
   and "asset"."deletedAt" is null
-  and "job_status"."previewAt" is not null
+  and exists (
+    select
+    from
+      "asset_file"
+    where
+      "assetId" = "asset"."id"
+      and "asset_file"."type" = $2
+  )
   and not exists (
     select
     from
@@ -621,7 +644,14 @@ from
 where
   "asset"."visibility" != $1
   and "asset"."deletedAt" is null
-  and "job_status"."previewAt" is not null
+  and exists (
+    select
+    from
+      "asset_file"
+    where
+      "assetId" = "asset"."id"
+      and "asset_file"."type" = $2
+  )
 order by
   "asset"."fileCreatedAt" desc
 
