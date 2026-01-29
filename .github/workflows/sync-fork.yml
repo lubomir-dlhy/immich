@@ -11,8 +11,6 @@ jobs:
     steps:
       - uses: tgymnich/fork-sync@v2.0
         with:
-          token: ${{ secrets.PERSONAL_TOKEN }}
           owner: immich-app
           base: main
           head: main
-          auto_approve: true
