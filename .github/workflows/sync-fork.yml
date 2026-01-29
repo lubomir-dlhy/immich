@@ -15,3 +15,4 @@ jobs:
           owner: immich-app
           base: main
           head: main
+          auto_approve: true
