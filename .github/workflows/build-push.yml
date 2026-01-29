@@ -33,6 +33,12 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
+      - name: Create .env file for build
+        run: |
+          # Copy example.env to .env in docker/ directory for docker-compose validation
+          # The .env file is required by docker-compose.prod.yml but values aren't used during build
+          cp docker/example.env docker/.env
+
       - name: Determine image tags
         id: tags
         run: |
