@@ -49,6 +49,7 @@ jobs:
           fi
 
       - name: Build and push
+        working-directory: docker
         run: |
           TAGS_ARGS=""
           for t in ${{ steps.tags.outputs.tag_list }}; do
@@ -56,7 +57,7 @@ jobs:
           done
           docker buildx bake \
             --allow=fs.read=.. \
-            -f docker/docker-compose.prod.yml \
+            -f docker-compose.prod.yml \
             --set $IMAGE.platform=linux/amd64 \
             $TAGS_ARGS \
             --push \
