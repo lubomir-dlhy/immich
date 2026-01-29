@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Image tag to push (e.g. latest or v2.4.1)'
+        description: "Image tag to push (e.g. latest or v2.4.1)"
         required: true
-        default: 'latest'
+        default: "latest"
 
 env:
   REGISTRY: registry.lubomirdlhy.sk:443
@@ -29,36 +29,39 @@ jobs:
       - name: Log in to registry
         uses: docker/login-action@v3
         with:
-          registry: registry.lubomirdlhy.sk
+          registry: registry.lubomirdlhy.sk:443
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
-      - name: Create .env file for build
-        run: |
-          # Copy example.env to .env in docker/ directory for docker-compose validation
-          # The .env file is required by docker-compose.prod.yml but values aren't used during build
-          cp docker/example.env docker/.env
-
       - name: Determine image tags
         id: tags
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE: ${{ env.IMAGE }}
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
-            echo "tag_list=${{ github.ref_name }} latest" >> "$GITHUB_OUTPUT"
+            REF="${{ github.ref_name }}"
+            [ "$REF" = "latest" ] && TAG_LIST="$REF" || TAG_LIST="$REF"
           else
-            echo "tag_list=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            TAG_LIST="${{ github.event.inputs.tag }}"
           fi
+          # Fallback when running locally (e.g. act) where inputs may be unset
+          [ -z "$TAG_LIST" ] && TAG_LIST="latest"
+          # Build comma-separated full image tags (must include registry so push goes to our registry)
+          TAGS_CSV=""
+          for t in $TAG_LIST; do
+            [ -n "$TAGS_CSV" ] && TAGS_CSV="$TAGS_CSV,"
+            TAGS_CSV="$TAGS_CSV$REGISTRY/$IMAGE:$t"
+          done
+          echo "tags=$TAGS_CSV" >> "$GITHUB_OUTPUT"
+          echo "Resolved tags: $TAGS_CSV"
 
       - name: Build and push
-        working-directory: docker
-        run: |
-          TAGS_ARGS=""
-          for t in ${{ steps.tags.outputs.tag_list }}; do
-            TAGS_ARGS="$TAGS_ARGS --set $IMAGE.tags=$REGISTRY/$IMAGE:$t"
-          done
-          docker buildx bake \
-            --allow=fs.read=.. \
-            -f docker-compose.prod.yml \
-            --set $IMAGE.platform=linux/amd64 \
-            $TAGS_ARGS \
-            --push \
-            $IMAGE
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          provenance: false
+          platforms: linux/amd64
