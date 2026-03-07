@@ -31,7 +31,7 @@ class LocalThumbProvider extends CancellableImageProvider<LocalThumbProvider>
         DiagnosticsProperty<String>('Id', key.id),
         DiagnosticsProperty<Size>('Size', key.size),
       ],
-      onDispose: cancel,
+      onLastListenerRemoved: cancel,
     );
   }
 
@@ -76,7 +76,7 @@ class LocalFullImageProvider extends CancellableImageProvider<LocalFullImageProv
         DiagnosticsProperty<String>('Id', key.id),
         DiagnosticsProperty<Size>('Size', key.size),
       ],
-      onDispose: cancel,
+      onLastListenerRemoved: cancel,
     );
   }
 
@@ -94,7 +94,6 @@ class LocalFullImageProvider extends CancellableImageProvider<LocalFullImageProv
       size: Size(size.width * devicePixelRatio, size.height * devicePixelRatio),
       assetType: key.assetType,
     );
-
     yield* loadRequest(request, decode);
 
     if (!Store.get(StoreKey.loadOriginal, false)) {

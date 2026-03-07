@@ -1,3 +1,4 @@
+import { getResizeObserverMock } from '$lib/__mocks__/resize-observer.mock';
 import { preferences as preferencesStore, resetSavedUser, user as userStore } from '$lib/stores/user.store';
 import { renderWithTooltips } from '$tests/helpers';
 import { assetFactory } from '@test-data/factories/asset-factory';
@@ -17,21 +18,19 @@ describe('AssetViewerNavBar component', () => {
   };
 
   beforeAll(() => {
-    Element.prototype.animate = vi.fn().mockImplementation(() => ({
-      cancel: () => {},
-    }));
-    vi.stubGlobal(
-      'ResizeObserver',
-      vi.fn(() => ({ observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() })),
-    );
-    vi.mock(import('$lib/managers/feature-flags-manager.svelte'), () => {
+    Element.prototype.animate = vi.fn().mockImplementation(function () {
+      return {
+        cancel: () => {},
+      };
+    });
+    vi.stubGlobal('ResizeObserver', getResizeObserverMock());
+    vi.mock(import('$lib/managers/feature-flags-manager.svelte'), function () {
       return {
         featureFlagsManager: {
           init: vi.fn(),
           loadFeatureFlags: vi.fn(),
-          value: { trash: true, smartSearch: true },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any,
+          value: { smartSearch: true, trash: true },
+        } as never,
       };
     });
   });

@@ -2,11 +2,13 @@ import { ProjectionType } from '$lib/constants';
 import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { eventManager } from '$lib/managers/event-manager.svelte';
+import AssetAddToAlbumModal from '$lib/modals/AssetAddToAlbumModal.svelte';
+import AssetTagModal from '$lib/modals/AssetTagModal.svelte';
 import SharedLinkCreateModal from '$lib/modals/SharedLinkCreateModal.svelte';
 import { user as authUser, preferences } from '$lib/stores/user.store';
-import { getAssetJobName, getSharedLink, sleep } from '$lib/utils';
+import type { AssetControlContext } from '$lib/types';
+import { getSharedLink, sleep } from '$lib/utils';
 import { downloadUrl } from '$lib/utils/asset-utils';
-import { openFileUploadDialog } from '$lib/utils/file-uploader';
 import { handleError } from '$lib/utils/handle-error';
 import { getFormatter } from '$lib/utils/i18n';
 import { asQueryString } from '$lib/utils/shared-links';
@@ -14,8 +16,6 @@ import {
   AssetJobName,
   AssetTypeEnum,
   AssetVisibility,
-  copyAsset,
-  deleteAssets,
   getAssetInfo,
   getBaseUrl,
   runAssetJobs,
@@ -40,22 +40,70 @@ import {
   mdiMagnifyPlusOutline,
   mdiMotionPauseOutline,
   mdiMotionPlayOutline,
+  mdiPlus,
   mdiShareVariantOutline,
+  mdiTagPlusOutline,
   mdiTune,
 } from '@mdi/js';
 import type { MessageFormatter } from 'svelte-i18n';
 import { get } from 'svelte/store';
 
+export const getAssetBulkActions = ($t: MessageFormatter, ctx: AssetControlContext) => {
+  const ownedAssets = ctx.getOwnedAssets();
+  const assetIds = ownedAssets.map((asset) => asset.id);
+  const isAllVideos = ownedAssets.every((asset) => asset.isVideo);
+
+  const onAction = async (name: AssetJobName) => {
+    await handleRunAssetJob({ name, assetIds });
+    ctx.clearSelect();
+  };
+
+  const AddToAlbum: ActionItem = {
+    title: $t('add_to_album'),
+    icon: mdiPlus,
+    shortcuts: [{ key: 'l' }],
+    onAction: () => modalManager.show(AssetAddToAlbumModal, { assetIds }),
+  };
+
+  const RefreshFacesJob: ActionItem = {
+    title: $t('refresh_faces'),
+    icon: mdiHeadSyncOutline,
+    onAction: () => onAction(AssetJobName.RefreshFaces),
+  };
+
+  const RefreshMetadataJob: ActionItem = {
+    title: $t('refresh_metadata'),
+    icon: mdiDatabaseRefreshOutline,
+    onAction: () => onAction(AssetJobName.RefreshMetadata),
+  };
+
+  const RegenerateThumbnailJob: ActionItem = {
+    title: $t('refresh_thumbnails'),
+    icon: mdiImageRefreshOutline,
+    onAction: () => onAction(AssetJobName.RegenerateThumbnail),
+  };
+
+  const TranscodeVideoJob: ActionItem = {
+    title: $t('refresh_encoded_videos'),
+    icon: mdiCogRefreshOutline,
+    onAction: () => onAction(AssetJobName.TranscodeVideo),
+    $if: () => isAllVideos,
+  };
+
+  return { AddToAlbum, RefreshFacesJob, RefreshMetadataJob, RegenerateThumbnailJob, TranscodeVideoJob };
+};
+
 export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) => {
   const sharedLink = getSharedLink();
   const currentAuthUser = get(authUser);
+  const userPreferences = get(preferences);
   const isOwner = !!(currentAuthUser && currentAuthUser.id === asset.ownerId);
 
   const Share: ActionItem = {
     title: $t('share'),
     icon: mdiShareVariantOutline,
     type: $t('assets'),
-    $if: () => !!(get(authUser) && !asset.isTrashed && asset.visibility !== AssetVisibility.Locked),
+    $if: () => !!(currentAuthUser && !asset.isTrashed && asset.visibility !== AssetVisibility.Locked),
     onAction: () => modalManager.show(SharedLinkCreateModal, { assetIds: [asset.id] }),
   };
 
@@ -78,7 +126,7 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
 
   const SharedLinkDownload: ActionItem = {
     ...Download,
-    $if: () => !currentAuthUser && sharedLink && sharedLink.allowDownload,
+    $if: () => isOwner || !!sharedLink?.allowDownload,
   };
 
   const PlayMotionPhoto: ActionItem = {
@@ -119,6 +167,14 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
     shortcuts: [{ key: 'f' }],
   };
 
+  const AddToAlbum: ActionItem = {
+    title: $t('add_to_album'),
+    icon: mdiPlus,
+    shortcuts: [{ key: 'l' }],
+    $if: () => asset.visibility !== AssetVisibility.Locked && !asset.isTrashed,
+    onAction: () => modalManager.show(AssetAddToAlbumModal, { assetIds: [asset.id] }),
+  };
+
   const Offline: ActionItem = {
     title: $t('asset_offline'),
     icon: mdiAlertOutline,
@@ -155,7 +211,16 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
     type: $t('assets'),
     $if: () => asset.hasMetadata,
     onAction: () => assetViewerManager.toggleDetailPanel(),
-    shortcuts: [{ key: 'i' }],
+    shortcuts: { key: 'i' },
+  };
+
+  const Tag: ActionItem = {
+    title: $t('add_tag'),
+    icon: mdiTagPlusOutline,
+    type: $t('assets'),
+    $if: () => userPreferences.tags.enabled,
+    onAction: () => modalManager.show(AssetTagModal, { assetIds: [asset.id] }),
+    shortcuts: { key: 't' },
   };
 
   const Edit: ActionItem = {
@@ -174,25 +239,25 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
   };
 
   const RefreshFacesJob: ActionItem = {
-    title: getAssetJobName($t, AssetJobName.RefreshFaces),
+    title: $t('refresh_faces'),
     icon: mdiHeadSyncOutline,
     onAction: () => handleRunAssetJob({ name: AssetJobName.RefreshFaces, assetIds: [asset.id] }),
   };
 
   const RefreshMetadataJob: ActionItem = {
-    title: getAssetJobName($t, AssetJobName.RefreshMetadata),
+    title: $t('refresh_metadata'),
     icon: mdiDatabaseRefreshOutline,
     onAction: () => handleRunAssetJob({ name: AssetJobName.RefreshMetadata, assetIds: [asset.id] }),
   };
 
   const RegenerateThumbnailJob: ActionItem = {
-    title: getAssetJobName($t, AssetJobName.RegenerateThumbnail),
+    title: $t('refresh_thumbnails'),
     icon: mdiImageRefreshOutline,
     onAction: () => handleRunAssetJob({ name: AssetJobName.RegenerateThumbnail, assetIds: [asset.id] }),
   };
 
   const TranscodeVideoJob: ActionItem = {
-    title: getAssetJobName($t, AssetJobName.TranscodeVideo),
+    title: $t('refresh_encoded_videos'),
     icon: mdiCogRefreshOutline,
     onAction: () => handleRunAssetJob({ name: AssetJobName.TranscodeVideo, assetIds: [asset.id] }),
     $if: () => asset.type === AssetTypeEnum.Video,
@@ -209,9 +274,11 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
     Unfavorite,
     PlayMotionPhoto,
     StopMotionPhoto,
+    AddToAlbum,
     ZoomIn,
     ZoomOut,
     Copy,
+    Tag,
     Edit,
     RefreshFacesJob,
     RefreshMetadataJob,
@@ -227,7 +294,6 @@ export const handleDownloadAsset = async (asset: AssetResponseDto, { edited }: {
     {
       filename: asset.originalFileName,
       id: asset.id,
-      size: asset.exifInfo?.fileSizeInByte || 0,
     },
   ];
 
@@ -241,7 +307,6 @@ export const handleDownloadAsset = async (asset: AssetResponseDto, { edited }: {
       assets.push({
         filename: motionAsset.originalFileName,
         id: asset.livePhotoVideoId,
-        size: motionAsset.exifInfo?.fileSizeInByte || 0,
       });
     }
   }
@@ -255,7 +320,7 @@ export const handleDownloadAsset = async (asset: AssetResponseDto, { edited }: {
     }
 
     try {
-      toastManager.success($t('downloading_asset_filename', { values: { filename: asset.originalFileName } }));
+      toastManager.success($t('downloading_asset_filename', { values: { filename } }));
       downloadUrl(
         getBaseUrl() +
           `/assets/${id}/original` +
@@ -292,12 +357,15 @@ const handleUnfavorite = async (asset: AssetResponseDto) => {
   }
 };
 
-export const handleReplaceAsset = async (oldAssetId: string) => {
-  const [newAssetId] = await openFileUploadDialog({ multiple: false });
-  await copyAsset({ assetCopyDto: { sourceId: oldAssetId, targetId: newAssetId } });
-  await deleteAssets({ assetBulkDeleteDto: { ids: [oldAssetId], force: true } });
+const getAssetJobMessage = ($t: MessageFormatter, job: AssetJobName) => {
+  const messages: Record<AssetJobName, string> = {
+    [AssetJobName.RefreshFaces]: $t('refreshing_faces'),
+    [AssetJobName.RefreshMetadata]: $t('refreshing_metadata'),
+    [AssetJobName.RegenerateThumbnail]: $t('regenerating_thumbnails'),
+    [AssetJobName.TranscodeVideo]: $t('refreshing_encoded_video'),
+  };
 
-  eventManager.emit('AssetReplace', { oldAssetId, newAssetId });
+  return messages[job];
 };
 
 const handleRunAssetJob = async (dto: AssetJobsDto) => {
@@ -305,7 +373,7 @@ const handleRunAssetJob = async (dto: AssetJobsDto) => {
 
   try {
     await runAssetJobs({ assetJobsDto: dto });
-    toastManager.success(getAssetJobName($t, dto.name));
+    toastManager.success(getAssetJobMessage($t, dto.name));
   } catch (error) {
     handleError(error, $t('errors.unable_to_submit_job'));
   }

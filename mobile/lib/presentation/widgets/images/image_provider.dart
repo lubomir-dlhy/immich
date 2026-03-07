@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:async/async.dart';
 import 'package:flutter/widgets.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
@@ -48,7 +50,7 @@ mixin CancellableImageProviderMixin<T extends Object> on CancellableImageProvide
     return null;
   }
 
-  Stream<ImageInfo> loadRequest(ImageRequest request, ImageDecoderCallback decode) async* {
+  Stream<ImageInfo> loadRequest(ImageRequest request, ImageDecoderCallback decode, {bool evictOnError = true}) async* {
     if (isCancelled) {
       this.request = null;
       PaintingBinding.instance.imageCache.evict(this);
@@ -57,11 +59,42 @@ mixin CancellableImageProviderMixin<T extends Object> on CancellableImageProvide
 
     try {
       final image = await request.load(decode);
-      if (image == null || isCancelled) {
+      if ((image == null && evictOnError) || isCancelled) {
         PaintingBinding.instance.imageCache.evict(this);
+        return;
+      } else if (image == null) {
         return;
       }
       yield image;
+    } catch (e, stack) {
+      if (evictOnError) {
+        PaintingBinding.instance.imageCache.evict(this);
+        rethrow;
+      }
+      _log.warning('Non-fatal image load error', e, stack);
+    } finally {
+      this.request = null;
+    }
+  }
+
+  Future<ui.Codec?> loadCodecRequest(ImageRequest request) async {
+    if (isCancelled) {
+      this.request = null;
+      PaintingBinding.instance.imageCache.evict(this);
+      return null;
+    }
+
+    try {
+      final codec = await request.loadCodec();
+      if (codec == null || isCancelled) {
+        codec?.dispose();
+        PaintingBinding.instance.imageCache.evict(this);
+        return null;
+      }
+      return codec;
+    } catch (e) {
+      PaintingBinding.instance.imageCache.evict(this);
+      rethrow;
     } finally {
       this.request = null;
     }
@@ -134,7 +167,7 @@ ImageProvider? getThumbnailImageProvider(BaseAsset asset, {Size size = kThumbnai
 
   final assetId = asset is RemoteAsset ? asset.id : (asset as LocalAsset).remoteId;
   final thumbhash = asset is RemoteAsset ? asset.thumbHash ?? "" : "";
-  return assetId != null ? RemoteThumbProvider(assetId: assetId, thumbhash: thumbhash) : null;
+  return assetId != null ? RemoteImageProvider.thumbnail(assetId: assetId, thumbhash: thumbhash) : null;
 }
 
 bool _shouldUseLocalAsset(BaseAsset asset) =>
