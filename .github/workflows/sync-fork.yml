@@ -60,20 +60,23 @@ jobs:
 
           git push origin "$SYNC_BRANCH" --force
 
-          # Check if a sync PR already exists
-          EXISTING_PR=$(gh pr list --head "$SYNC_BRANCH" --base main --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
+          # Check if a sync PR already exists (use REST API — GraphQL is
+          # restricted on forked repos even with correct permissions)
+          EXISTING_PR=$(gh api repos/${{ github.repository }}/pulls \
+            --jq ".[] | select(.head.ref==\"$SYNC_BRANCH\" and .state==\"open\") | .number" \
+            2>/dev/null | head -1)
           if [ -n "$EXISTING_PR" ]; then
             echo "Sync PR #$EXISTING_PR already exists, updated branch"
             exit 0
           fi
 
-          # Create the PR
-          gh pr create \
-            --title "sync: merge upstream immich-app/immich" \
-            --body "Automated PR to sync with upstream immich-app/immich.
+          # Create the PR via REST API
+          gh api repos/${{ github.repository }}/pulls \
+            -f title="sync: merge upstream immich-app/immich" \
+            -f body="Automated PR to sync with upstream immich-app/immich.
 
           **${{ steps.check.outputs.new_commits }}** new commits from upstream.
 
           > Created automatically by the Upstream Sync workflow." \
-            --head "$SYNC_BRANCH" \
-            --base main
+            -f head="$SYNC_BRANCH" \
+            -f base="main"
