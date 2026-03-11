@@ -49,6 +49,15 @@ jobs:
 
           # Create/update the sync branch pointing to upstream/main
           git checkout -B "$SYNC_BRANCH" upstream/main
+
+          # Replace upstream workflows with our fork's — upstream workflows
+          # are not relevant and GITHUB_TOKEN can't push workflow changes anyway
+          git rm -rf --quiet .github/workflows/
+          git checkout origin/main -- .github/workflows/
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: preserve fork workflow files"
+          fi
+
           git push origin "$SYNC_BRANCH" --force
 
           # Check if a sync PR already exists
