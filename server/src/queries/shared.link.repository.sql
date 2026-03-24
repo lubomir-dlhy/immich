@@ -173,6 +173,7 @@ order by
 select
   "shared_link"."id",
   "shared_link"."userId",
+  "shared_link"."albumId",
   "shared_link"."expiresAt",
   "shared_link"."showExif",
   "shared_link"."allowUpload",
@@ -211,6 +212,7 @@ where
 select
   "shared_link"."id",
   "shared_link"."userId",
+  "shared_link"."albumId",
   "shared_link"."expiresAt",
   "shared_link"."showExif",
   "shared_link"."allowUpload",
@@ -244,3 +246,37 @@ where
     or "album"."id" is not null
   )
   and "shared_link"."slug" = $2
+
+-- SharedLinkRepository.getSharedLinks
+select
+  "shared_link".*,
+  coalesce(
+    json_agg("assets") filter (
+      where
+        "assets"."id" is not null
+    ),
+    '[]'
+  ) as "assets"
+from
+  "shared_link"
+  left join "shared_link_asset" on "shared_link_asset"."sharedLinkId" = "shared_link"."id"
+  left join lateral (
+    select
+      "asset".*
+    from
+      "asset"
+      inner join lateral (
+        select
+          *
+        from
+          "asset_exif"
+        where
+          "asset_exif"."assetId" = "asset"."id"
+      ) as "exifInfo" on true
+    where
+      "asset"."id" = "shared_link_asset"."assetId"
+  ) as "assets" on true
+where
+  "shared_link"."id" = $1
+group by
+  "shared_link"."id"
