@@ -22,6 +22,7 @@ import { AssetOrder, AssetVisibility, Permission } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import { requireElevatedPermission } from 'src/utils/access';
 import { getMyPartnerIds } from 'src/utils/asset.util';
+import { forkFeatures } from 'src/utils/fork-features';
 import { isSmartSearchEnabled } from 'src/utils/misc';
 
 @Injectable()
@@ -66,6 +67,7 @@ export class SearchService extends BaseService {
         ...dto,
         checksum,
         userIds,
+        ...this.sharedAlbumOption(auth),
         orderDirection: dto.order ?? AssetOrder.Desc,
       },
     );
@@ -79,6 +81,7 @@ export class SearchService extends BaseService {
     return await this.searchRepository.searchStatistics({
       ...dto,
       userIds,
+      ...this.sharedAlbumOption(auth),
     });
   }
 
@@ -88,7 +91,11 @@ export class SearchService extends BaseService {
     }
 
     const userIds = await this.getUserIdsToSearch(auth);
-    const items = await this.searchRepository.searchRandom(dto.size || 250, { ...dto, userIds });
+    const items = await this.searchRepository.searchRandom(dto.size || 250, {
+      ...dto,
+      userIds,
+      ...this.sharedAlbumOption(auth),
+    });
     return items.map((item) => mapAsset(item, { auth }));
   }
 
@@ -98,7 +105,11 @@ export class SearchService extends BaseService {
     }
 
     const userIds = await this.getUserIdsToSearch(auth);
-    const items = await this.searchRepository.searchLargeAssets(dto.size || 250, { ...dto, userIds });
+    const items = await this.searchRepository.searchLargeAssets(dto.size || 250, {
+      ...dto,
+      userIds,
+      ...this.sharedAlbumOption(auth),
+    });
     return items.map((item) => mapAsset(item, { auth }));
   }
 
@@ -139,7 +150,7 @@ export class SearchService extends BaseService {
     const size = dto.size || 100;
     const { hasNextPage, items } = await this.searchRepository.searchSmart(
       { page, size },
-      { ...dto, userIds: await userIds, embedding },
+      { ...dto, userIds: await userIds, ...this.sharedAlbumOption(auth), embedding },
     );
 
     return this.mapResponse(items, hasNextPage ? (page + 1).toString() : null, { auth });
@@ -193,6 +204,15 @@ export class SearchService extends BaseService {
       timelineEnabled: true,
     });
     return [auth.user.id, ...partnerIds];
+  }
+
+  /**
+   * Fork: opt the viewer's own user id into shared-album inclusion so search
+   * results also span photos others shared with them via albums. Gated by the
+   * `sharedAlbumSearch` fork flag (default on).
+   */
+  private sharedAlbumOption(auth: AuthDto): { sharedAlbumWithUserId?: string } {
+    return forkFeatures.sharedAlbumSearch ? { sharedAlbumWithUserId: auth.user.id } : {};
   }
 
   private mapResponse(assets: MapAsset[], nextPage: string | null, options: AssetMapOptions): SearchResponseDto {

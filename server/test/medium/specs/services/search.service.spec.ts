@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
 import { SearchSuggestionType } from 'src/dtos/search.dto';
+import { AlbumUserRole } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -107,6 +108,35 @@ describe(SearchService.name, () => {
 
       expect(response.assets.items.length).toBe(1);
       expect(response.assets.items[0].id).toBe(unstackedAsset.id);
+    });
+  });
+
+  // Fork: photos shared with the viewer via albums should appear in their search.
+  describe('shared album search (fork)', () => {
+    it('includes album-shared assets owned by others, and only those', async () => {
+      const { sut, ctx } = setup();
+      const { user: viewer } = await ctx.newUser();
+      const { user: owner } = await ctx.newUser();
+
+      // owner's asset in an album shared with the viewer -> should appear
+      const { asset: sharedAsset } = await ctx.newAsset({ ownerId: owner.id });
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [sharedAsset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer });
+
+      // owner's asset in an album the viewer is NOT a member of -> should not appear
+      const { asset: otherAlbumAsset } = await ctx.newAsset({ ownerId: owner.id });
+      await ctx.newAlbum({ ownerId: owner.id }, [otherAlbumAsset.id]);
+
+      // owner's asset not in any album -> should not appear
+      const { asset: privateAsset } = await ctx.newAsset({ ownerId: owner.id });
+
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const response = await sut.searchMetadata(auth, {});
+      const ids = response.assets.items.map((asset) => asset.id);
+
+      expect(ids).toContain(sharedAsset.id);
+      expect(ids).not.toContain(otherAlbumAsset.id);
+      expect(ids).not.toContain(privateAsset.id);
     });
   });
 

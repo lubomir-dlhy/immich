@@ -242,7 +242,13 @@ describe(SearchService.name, () => {
       );
       expect(mocks.search.searchSmart).toHaveBeenCalledWith(
         { page: 1, size: 100 },
-        { query: 'test', embedding: '[1, 2, 3]', userIds: [authStub.user1.user.id] },
+        {
+          query: 'test',
+          embedding: '[1, 2, 3]',
+          userIds: [authStub.user1.user.id],
+          // Fork: shared-album search is on by default, so the viewer opts in.
+          sharedAlbumWithUserId: authStub.user1.user.id,
+        },
       );
     });
 
