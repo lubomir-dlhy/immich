@@ -153,7 +153,20 @@ export class PersonRepository {
     const items = await this.db
       .selectFrom('person')
       .selectAll('person')
-      .innerJoin('asset_face', 'asset_face.personId', 'person.id')
+      // Fork: match faces assigned via the owner column OR the shared join table.
+      .innerJoin('asset_face', (join) =>
+        join.on((eb) =>
+          eb.or([
+            eb('asset_face.personId', '=', eb.ref('person.id')),
+            eb.exists(
+              eb
+                .selectFrom('asset_face_person')
+                .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+                .whereRef('asset_face_person.personId', '=', 'person.id'),
+            ),
+          ]),
+        ),
+      )
       .innerJoin('asset', (join) =>
         join
           .onRef('asset_face.assetId', '=', 'asset.id')
@@ -209,7 +222,21 @@ export class PersonRepository {
     return this.db
       .selectFrom('person')
       .selectAll('person')
-      .leftJoin('asset_face', 'asset_face.personId', 'person.id')
+      // Fork: count faces from the owner column AND the shared join table, so a
+      // person whose faces are only on shared assets is not treated as faceless.
+      .leftJoin('asset_face', (join) =>
+        join.on((eb) =>
+          eb.or([
+            eb('asset_face.personId', '=', eb.ref('person.id')),
+            eb.exists(
+              eb
+                .selectFrom('asset_face_person')
+                .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+                .whereRef('asset_face_person.personId', '=', 'person.id'),
+            ),
+          ]),
+        ),
+      )
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
       .having((eb) => eb.fn.count('asset_face.assetId'), '=', 0)
@@ -418,7 +445,18 @@ export class PersonRepository {
       .select((eb) => eb.fn.count(eb.fn('distinct', ['asset.id'])).as('count'))
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
-      .where('asset_face.personId', '=', personId)
+      // Fork: count faces assigned via the owner column OR the shared join table.
+      .where((eb) =>
+        eb.or([
+          eb('asset_face.personId', '=', personId),
+          eb.exists(
+            eb
+              .selectFrom('asset_face_person')
+              .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+              .where('asset_face_person.personId', '=', personId),
+          ),
+        ]),
+      )
       .executeTakeFirst();
 
     return {
@@ -435,7 +473,18 @@ export class PersonRepository {
         eb.exists((eb) =>
           eb
             .selectFrom('asset_face')
-            .whereRef('asset_face.personId', '=', 'person.id')
+            // Fork: faces assigned via the owner column OR the shared join table.
+            .where((eb) =>
+              eb.or([
+                eb('asset_face.personId', '=', eb.ref('person.id')),
+                eb.exists((eb) =>
+                  eb
+                    .selectFrom('asset_face_person')
+                    .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+                    .whereRef('asset_face_person.personId', '=', 'person.id'),
+                ),
+              ]),
+            )
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', '=', true)
             .where((eb) =>
@@ -557,7 +606,18 @@ export class PersonRepository {
     return this.db
       .selectFrom('asset_face')
       .selectAll('asset_face')
-      .where('asset_face.personId', '=', personId)
+      // Fork: a person's faces include those linked via the shared join table.
+      .where((eb) =>
+        eb.or([
+          eb('asset_face.personId', '=', personId),
+          eb.exists(
+            eb
+              .selectFrom('asset_face_person')
+              .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+              .where('asset_face_person.personId', '=', personId),
+          ),
+        ]),
+      )
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
       .executeTakeFirst();

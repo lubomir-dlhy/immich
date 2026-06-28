@@ -160,13 +160,29 @@ export function hasPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personIds: 
   return qb.innerJoin(
     (eb) =>
       eb
-        .selectFrom('asset_face')
-        .select('assetId')
-        .where('personId', '=', anyUuid(personIds!))
-        .where('deletedAt', 'is', null)
-        .where('isVisible', 'is', true)
-        .groupBy('assetId')
-        .having((eb) => eb.fn.count('personId').distinct(), '=', personIds.length)
+        // Fork: union person links from the owner column and the shared join table,
+        // so searching by a person also matches faces recognized on shared assets.
+        .selectFrom((inner) =>
+          inner
+            .selectFrom('asset_face')
+            .select(['asset_face.assetId as assetId', 'asset_face.personId as personId'])
+            .where('asset_face.personId', 'is not', null)
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .unionAll(
+              inner
+                .selectFrom('asset_face_person')
+                .innerJoin('asset_face', 'asset_face.id', 'asset_face_person.faceId')
+                .select(['asset_face.assetId as assetId', 'asset_face_person.personId as personId'])
+                .where('asset_face.deletedAt', 'is', null)
+                .where('asset_face.isVisible', 'is', true),
+            )
+            .as('face_links'),
+        )
+        .select('face_links.assetId as assetId')
+        .where('face_links.personId', '=', anyUuid(personIds!))
+        .groupBy('face_links.assetId')
+        .having((eb) => eb.fn.count('face_links.personId').distinct(), '=', personIds.length)
         .as('has_people'),
     (join) => join.onRef('has_people.assetId', '=', 'asset.id'),
   );
