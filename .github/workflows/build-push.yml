@@ -1,0 +1,67 @@
+name: Build and Push Image
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to push (e.g. latest or v2.4.1)"
+        required: true
+        default: "latest"
+
+env:
+  REGISTRY: registry.lubomirdlhy.sk:443
+  IMAGE: immich-server
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.lubomirdlhy.sk:443
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Determine image tags
+        id: tags
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE: ${{ env.IMAGE }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            REF="${{ github.ref_name }}"
+            [ "$REF" = "latest" ] && TAG_LIST="$REF" || TAG_LIST="$REF"
+          else
+            TAG_LIST="${{ github.event.inputs.tag }}"
+          fi
+          # Fallback when running locally (e.g. act) where inputs may be unset
+          [ -z "$TAG_LIST" ] && TAG_LIST="latest"
+          # Build comma-separated full image tags (must include registry so push goes to our registry)
+          TAGS_CSV=""
+          for t in $TAG_LIST; do
+            [ -n "$TAGS_CSV" ] && TAGS_CSV="$TAGS_CSV,"
+            TAGS_CSV="$TAGS_CSV$REGISTRY/$IMAGE:$t"
+          done
+          echo "tags=$TAGS_CSV" >> "$GITHUB_OUTPUT"
+          echo "Resolved tags: $TAGS_CSV"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          provenance: false
+          platforms: linux/amd64
