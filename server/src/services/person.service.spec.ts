@@ -28,6 +28,8 @@ describe(PersonService.name, () => {
 
   beforeEach(() => {
     ({ sut, mocks } = newTestService(PersonService));
+    // Fork: default to no additional accessing users for per-viewer recognition.
+    mocks.person.getAdditionalAccessUserIds.mockResolvedValue([]);
   });
 
   it('should be defined', () => {
@@ -1020,6 +1022,49 @@ describe(PersonService.name, () => {
         faceIds: expect.not.arrayContaining([face.id]),
         newPersonId: primaryFace.person!.id,
       });
+    });
+
+    it('fork: links the face to an accessing user matching person', async () => {
+      const asset = AssetFactory.create();
+      const noPerson = AssetFaceFactory.create({ assetId: asset.id });
+      const matchFace = AssetFaceFactory.from().person().build();
+
+      const faces = [
+        { ...noPerson, distance: 0 },
+        { ...matchFace, distance: 0.2 },
+      ] as FaceSearchResult[];
+
+      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+      mocks.search.searchFaces.mockResolvedValue(faces);
+      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+      mocks.person.getAdditionalAccessUserIds.mockResolvedValue(['user-b']);
+      mocks.person.hasFacePersonForUser.mockResolvedValue(false);
+
+      await sut.handleRecognizeFaces({ id: noPerson.id });
+
+      expect(mocks.person.linkFacePerson).toHaveBeenCalledWith({
+        faceId: noPerson.id,
+        personId: matchFace.person!.id,
+      });
+    });
+
+    it('fork: skips an accessing user already linked to the face', async () => {
+      const asset = AssetFactory.create();
+      const noPerson = AssetFaceFactory.create({ assetId: asset.id });
+      const matchFace = AssetFaceFactory.from().person().build();
+
+      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+      mocks.search.searchFaces.mockResolvedValue([
+        { ...noPerson, distance: 0 },
+        { ...matchFace, distance: 0.2 },
+      ] as FaceSearchResult[]);
+      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(noPerson, asset));
+      mocks.person.getAdditionalAccessUserIds.mockResolvedValue(['user-b']);
+      mocks.person.hasFacePersonForUser.mockResolvedValue(true);
+
+      await sut.handleRecognizeFaces({ id: noPerson.id });
+
+      expect(mocks.person.linkFacePerson).not.toHaveBeenCalled();
     });
 
     it('should match existing person if their birth date is unknown', async () => {
