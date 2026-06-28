@@ -150,6 +150,18 @@ export function withFacesAndPeople(
       )
       .selectAll('asset_face')
       .select((eb) => eb.table('person').$castTo<ShallowDehydrateObject<Person>>().as('person'))
+      // Fork: per-viewer person assignments linked via asset_face_person.
+      .select((eb) =>
+        jsonArrayFrom(
+          eb
+            .selectFrom('asset_face_person')
+            .innerJoin('person', 'person.id', 'asset_face_person.personId')
+            .selectAll('person')
+            .whereRef('asset_face_person.faceId', '=', 'asset_face.id'),
+        )
+          .$castTo<ShallowDehydrateObject<Person>[]>()
+          .as('people'),
+      )
       .whereRef('asset_face.assetId', '=', 'asset.id')
       .$if(!withDeletedFace, (qb) => qb.where('asset_face.deletedAt', 'is', null))
       .$if(!withHidden, (qb) => qb.where('asset_face.isVisible', 'is', true)),

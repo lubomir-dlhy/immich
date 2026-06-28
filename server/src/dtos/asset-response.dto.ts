@@ -199,6 +199,7 @@ export type AssetMapOptions = {
 
 const peopleWithFaces = (
   faces?: MaybeDehydrated<AssetFace>[],
+  auth?: AuthDto,
   edits?: AssetEditActionItem[],
   assetDimensions?: ImageDimensions,
 ): PersonWithFacesResponseDto[] => {
@@ -208,19 +209,26 @@ const peopleWithFaces = (
 
   const peopleFaces: Map<string, PersonWithFacesResponseDto> = new Map();
 
-  for (const face of faces) {
-    if (!face.person) {
-      continue;
-    }
-
-    if (!peopleFaces.has(face.person.id)) {
-      peopleFaces.set(face.person.id, {
-        ...mapPerson(face.person),
+  const addFace = (person: NonNullable<AssetFace['person']>, face: MaybeDehydrated<AssetFace>) => {
+    if (!peopleFaces.has(person.id)) {
+      peopleFaces.set(person.id, {
+        ...mapPerson(person),
         faces: [],
       });
     }
-    const mappedFace = mapFacesWithoutPerson(face, edits, assetDimensions);
-    peopleFaces.get(face.person.id)!.faces.push(mappedFace);
+    peopleFaces.get(person.id)!.faces.push(mapFacesWithoutPerson(face, edits, assetDimensions));
+  };
+
+  for (const face of faces) {
+    if (face.person) {
+      addFace(face.person, face);
+    }
+    // Fork: also surface the viewer's own people linked to this face on shared assets.
+    for (const person of face.people ?? []) {
+      if (person && person.ownerId === auth?.user.id) {
+        addFace(person, face);
+      }
+    }
   }
 
   return [...peopleFaces.values()];
@@ -284,7 +292,7 @@ export function mapAsset(entity: MaybeDehydrated<MapAsset>, options: AssetMapOpt
     exifInfo: entity.exifInfo ? mapExif(entity.exifInfo) : undefined,
     livePhotoVideoId: entity.livePhotoVideoId,
     tags: entity.tags?.map((tag) => mapTag(tag)),
-    people: peopleWithFaces(entity.faces, entity.edits, assetDimensions),
+    people: peopleWithFaces(entity.faces, options.auth, entity.edits, assetDimensions),
     unassignedFaces: entity.faces
       ?.filter((face) => !face.person)
       .map((face) => mapFacesWithoutPerson(face, entity.edits, assetDimensions)),
