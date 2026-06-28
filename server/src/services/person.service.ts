@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Insertable, Updateable } from 'kysely';
+import { MachineLearningConfig } from 'src/config';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { Person } from 'src/database';
 import { Chunked, OnJob } from 'src/decorators';
@@ -42,6 +43,7 @@ import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
 import { getDimensions } from 'src/utils/asset.util';
 import { ImmichFileResponse } from 'src/utils/file';
+import { forkFeatures } from 'src/utils/fork-features';
 import { mimeTypes } from 'src/utils/mime-types';
 import { isFacialRecognitionEnabled } from 'src/utils/misc';
 import { Point, transformPoints } from 'src/utils/transform';
@@ -425,6 +427,8 @@ export class PersonService extends BaseService {
 
     if (force) {
       await this.personRepository.unassignFaces({ sourceType: SourceType.MachineLearning });
+      // Fork: also drop ML-created shared (per-viewer) face links so they get rebuilt.
+      await this.personRepository.clearSharedFaceLinks(SourceType.MachineLearning);
       await this.handlePersonCleanup();
       await this.personRepository.vacuum({ reindexVectors: false });
     } else if (waiting) {
@@ -486,6 +490,22 @@ export class PersonService extends BaseService {
       return JobStatus.Skipped;
     }
 
+    // Fork: also recognize this face under each additional user who can access the
+    // asset (album members, partners), into their own people catalog. Runs before
+    // the owner pass so it is unaffected by the owner's early-skip/defer paths.
+    if (forkFeatures.sharedFaceRecognition) {
+      const sharedFace = {
+        id: face.id,
+        embedding: face.faceSearch.embedding,
+        fileCreatedAt: face.asset.fileCreatedAt,
+        visibility: face.asset.visibility,
+      };
+      const accessUserIds = await this.personRepository.getAdditionalAccessUserIds(face.assetId, face.asset.ownerId);
+      for (const userId of accessUserIds) {
+        await this.recognizeFaceForUser(sharedFace, userId, machineLearning);
+      }
+    }
+
     const matches = await this.searchRepository.searchFaces({
       userIds: [face.asset.ownerId],
       embedding: face.faceSearch.embedding,
@@ -540,6 +560,61 @@ export class PersonService extends BaseService {
     }
 
     return JobStatus.Success;
+  }
+
+  /**
+   * Fork: recognize a face under one additional (non-owner) user's people catalog,
+   * writing the assignment into asset_face_person. Mirrors the owner recognition
+   * logic but searches only the given user's faces and only creates a new person
+   * when that user has enough matching faces of their own.
+   */
+  private async recognizeFaceForUser(
+    face: { id: string; embedding: string; fileCreatedAt: Date | string; visibility: AssetVisibility },
+    userId: string,
+    machineLearning: MachineLearningConfig,
+  ): Promise<void> {
+    // Idempotency: skip if already linked to one of this user's people.
+    if (await this.personRepository.hasFacePersonForUser(face.id, userId)) {
+      return;
+    }
+
+    const minBirthDate = new Date(face.fileCreatedAt);
+    const matches = await this.searchRepository.searchFaces({
+      userIds: [userId],
+      embedding: face.embedding,
+      maxDistance: machineLearning.facialRecognition.maxDistance,
+      numResults: machineLearning.facialRecognition.minFaces,
+      minBirthDate,
+    });
+
+    let personId = matches.find((match) => match.personId)?.personId;
+    if (!personId) {
+      const matchWithPerson = await this.searchRepository.searchFaces({
+        userIds: [userId],
+        embedding: face.embedding,
+        maxDistance: machineLearning.facialRecognition.maxDistance,
+        numResults: 1,
+        hasPerson: true,
+        minBirthDate,
+      });
+      if (matchWithPerson.length > 0) {
+        personId = matchWithPerson[0].personId;
+      }
+    }
+
+    // Only create a brand-new person for this user when they already have enough
+    // matching faces of their own, and the asset is in their timeline.
+    const isCore =
+      matches.length >= machineLearning.facialRecognition.minFaces && face.visibility === AssetVisibility.Timeline;
+    if (!personId && isCore) {
+      const newPerson = await this.personRepository.create({ ownerId: userId, faceAssetId: face.id });
+      await this.jobRepository.queue({ name: JobName.PersonGenerateThumbnail, data: { id: newPerson.id } });
+      personId = newPerson.id;
+    }
+
+    if (personId) {
+      await this.personRepository.linkFacePerson({ faceId: face.id, personId });
+    }
   }
 
   @OnJob({ name: JobName.PersonFileMigration, queue: QueueName.Migration })

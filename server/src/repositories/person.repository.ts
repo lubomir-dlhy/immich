@@ -248,7 +248,7 @@ export class PersonRepository {
   getFaceForFacialRecognitionJob(id: string) {
     return this.db
       .selectFrom('asset_face')
-      .select(['asset_face.id', 'asset_face.personId', 'asset_face.sourceType'])
+      .select(['asset_face.id', 'asset_face.assetId', 'asset_face.personId', 'asset_face.sourceType'])
       .select((eb) =>
         jsonObjectFrom(
           eb
@@ -286,6 +286,77 @@ export class PersonRepository {
       .where('person.id', '=', id)
       .where('asset_face.deletedAt', 'is', null)
       .executeTakeFirst();
+  }
+
+  /**
+   * Fork: users (other than the owner) who can access an asset via albums or
+   * partner sharing — the set for whom a detected face should also be recognized.
+   */
+  async getAdditionalAccessUserIds(assetId: string, ownerId: string): Promise<string[]> {
+    const albumRows = await this.db
+      .selectFrom('album_asset')
+      .innerJoin('album', (join) =>
+        join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null),
+      )
+      .leftJoin('album_user', 'album_user.albumId', 'album.id')
+      .where('album_asset.assetId', '=', assetId)
+      .select(['album.ownerId as albumOwnerId', 'album_user.userId as albumUserId'])
+      .execute();
+
+    const partnerRows = await this.db
+      .selectFrom('partner')
+      .where('partner.sharedById', '=', ownerId)
+      .select('partner.sharedWithId as userId')
+      .execute();
+
+    const userIds = new Set<string>();
+    for (const row of albumRows) {
+      if (row.albumOwnerId) {
+        userIds.add(row.albumOwnerId);
+      }
+      if (row.albumUserId) {
+        userIds.add(row.albumUserId);
+      }
+    }
+    for (const row of partnerRows) {
+      userIds.add(row.userId);
+    }
+    userIds.delete(ownerId);
+    return [...userIds];
+  }
+
+  /** Fork: whether a face is already linked to one of the user's people (idempotency guard). */
+  async hasFacePersonForUser(faceId: string, userId: string): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('asset_face_person')
+      .innerJoin('person', 'person.id', 'asset_face_person.personId')
+      .where('asset_face_person.faceId', '=', faceId)
+      .where('person.ownerId', '=', userId)
+      .select('asset_face_person.faceId')
+      .executeTakeFirst();
+    return !!row;
+  }
+
+  /** Fork: link a face to an additional (non-owner) viewer's person. */
+  async linkFacePerson({
+    faceId,
+    personId,
+    sourceType = SourceType.MachineLearning,
+  }: {
+    faceId: string;
+    personId: string;
+    sourceType?: SourceType;
+  }): Promise<void> {
+    await this.db
+      .insertInto('asset_face_person')
+      .values({ faceId, personId, sourceType })
+      .onConflict((oc) => oc.columns(['faceId', 'personId']).doNothing())
+      .execute();
+  }
+
+  /** Fork: clear shared face links of a given source (used on force re-recognition). */
+  async clearSharedFaceLinks(sourceType: SourceType): Promise<void> {
+    await this.db.deleteFrom('asset_face_person').where('sourceType', '=', sourceType).execute();
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
