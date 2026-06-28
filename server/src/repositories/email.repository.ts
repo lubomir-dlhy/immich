@@ -190,7 +190,6 @@ export class EmailRepository {
       secure,
       requireTLS: !secure && port === 587,
       tls: { rejectUnauthorized: !options.ignoreCert },
-      secure: options.secure,
       auth:
         options.username || options.password
           ? {
