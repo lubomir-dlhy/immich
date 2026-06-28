@@ -111,6 +111,43 @@ describe(AssetRepository.name, () => {
         }),
       );
     });
+
+    // Fork: a person's timeline includes photos of them shared via albums.
+    it('includes shared-album assets containing the viewer person when sharedAlbumWithUserId is set', async () => {
+      const { ctx, sut } = setup();
+      const personRepo = ctx.get(PersonRepository);
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: viewer.id } });
+
+      const { asset } = await ctx.newAsset({
+        ownerId: owner.id,
+        fileCreatedAt: new Date('2026-03-08T23:30:00.000Z'),
+        localDateTime: new Date('2026-03-08T23:30:00.000Z'),
+      });
+      await ctx.newExif({ assetId: asset.id, timeZone: 'UTC' });
+      const { person: ownerPerson } = await ctx.newPerson({ ownerId: owner.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerPerson.id });
+
+      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id });
+      await personRepo.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
+
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
+
+      const options = {
+        personId: viewerPerson.id,
+        userIds: [viewer.id],
+        visibility: AssetVisibility.Timeline,
+      };
+
+      const withShared = await sut.getTimeBucket('2026-03-01', { ...options, sharedAlbumWithUserId: viewer.id }, auth);
+      expect(JSON.parse(withShared.assets).id ?? []).toContain(asset.id);
+
+      // Control: without the shared-album option, the shared asset is excluded.
+      const withoutShared = await sut.getTimeBucket('2026-03-01', options, auth);
+      expect(JSON.parse(withoutShared.assets).id ?? []).not.toContain(asset.id);
+    });
   });
 
   describe('upsertExif', () => {

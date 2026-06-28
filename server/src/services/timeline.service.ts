@@ -6,6 +6,7 @@ import { TimeBucketOptions } from 'src/repositories/asset.repository';
 import { BaseService } from 'src/services/base.service';
 import { requireElevatedPermission } from 'src/utils/access';
 import { getMyPartnerIds } from 'src/utils/asset.util';
+import { forkFeatures } from 'src/utils/fork-features';
 
 @Injectable()
 export class TimelineService extends BaseService {
@@ -41,7 +42,12 @@ export class TimelineService extends BaseService {
       }
     }
 
-    return { ...options, userIds };
+    // Fork: when viewing a person's photos, also include shared-album assets so
+    // photos of that person uploaded by others appear in their timeline.
+    const sharedAlbumWithUserId =
+      forkFeatures.sharedFaceRecognition && dto.personId ? auth.user.id : undefined;
+
+    return { ...options, userIds, sharedAlbumWithUserId };
   }
 
   private async timeBucketChecks(auth: AuthDto, dto: TimeBucketDto) {
