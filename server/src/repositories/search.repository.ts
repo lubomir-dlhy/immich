@@ -22,6 +22,11 @@ export interface SearchUserIdOptions {
   deviceId?: string;
   libraryId?: string | null;
   userIds?: string[];
+  /**
+   * Fork: when set, also include assets shared with this user via albums
+   * (in addition to the owner/partner assets matched by `userIds`).
+   */
+  sharedAlbumWithUserId?: string;
 }
 
 export type SearchIdOptions = SearchAssetIdOptions & SearchUserIdOptions;

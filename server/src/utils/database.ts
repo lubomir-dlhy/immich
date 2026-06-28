@@ -186,6 +186,26 @@ export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: st
   );
 }
 
+/**
+ * Fork: matches assets that are in an album accessible to `userId` — either an
+ * album the user owns, or one shared with them. Mirrors the album-access rule
+ * in access.repository.ts (AssetAccess.checkAlbumAccess).
+ */
+export function withSharedAlbumAccess(eb: ExpressionBuilder<DB, 'asset'>, userId: string) {
+  return eb.exists(
+    eb
+      .selectFrom('album_asset')
+      .innerJoin('album', 'album.id', 'album_asset.albumId')
+      .leftJoin('album_user', 'album_user.albumId', 'album.id')
+      .whereRef('album_asset.assetId', '=', 'asset.id')
+      .where('album.deletedAt', 'is', null)
+      .where((inner) =>
+        inner.or([inner('album.ownerId', '=', asUuid(userId)), inner('album_user.userId', '=', asUuid(userId))]),
+      )
+      .select(sql`1`.as('exists')),
+  );
+}
+
 export function hasTags<O>(qb: SelectQueryBuilder<DB, 'asset', O>, tagIds: string[]) {
   return qb.innerJoin(
     (eb) =>
@@ -355,7 +375,15 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
     .$if(!!options.deviceId, (qb) => qb.where('asset.deviceId', '=', options.deviceId!))
     .$if(!!options.id, (qb) => qb.where('asset.id', '=', asUuid(options.id!)))
     .$if(!!options.libraryId, (qb) => qb.where('asset.libraryId', '=', asUuid(options.libraryId!)))
-    .$if(!!options.userIds, (qb) => qb.where('asset.ownerId', '=', anyUuid(options.userIds!)))
+    .$if(!!options.userIds, (qb) =>
+      qb.where((eb) => {
+        const ownerMatch = eb('asset.ownerId', '=', anyUuid(options.userIds!));
+        // Fork: also surface assets shared with the viewer via albums.
+        return options.sharedAlbumWithUserId
+          ? eb.or([ownerMatch, withSharedAlbumAccess(eb, options.sharedAlbumWithUserId)])
+          : ownerMatch;
+      }),
+    )
     .$if(!!options.encodedVideoPath, (qb) =>
       qb
         .innerJoin('asset_file', (join) =>
