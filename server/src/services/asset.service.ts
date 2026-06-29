@@ -100,7 +100,10 @@ export class AssetService extends BaseService {
       delete data.owner;
     }
 
-    if (data.ownerId !== auth.user.id || auth.sharedLink) {
+    // Fork: `people` is already viewer-scoped by mapAsset (a viewer only sees their
+    // own people, incl. per-viewer recognitions on shared assets), so it no longer
+    // needs to be blanked for non-owners — only for anonymous shared-link access.
+    if (auth.sharedLink) {
       data.people = [];
     }
 

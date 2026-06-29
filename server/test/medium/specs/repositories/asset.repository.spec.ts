@@ -44,13 +44,13 @@ describe(AssetRepository.name, () => {
       const entity = await sut.getById(asset.id, { faces: { person: true } });
       expect(entity).toBeDefined();
 
-      // The viewer sees their own person (plus the owner's existing tag).
+      // The viewer sees only their own person — never the owner's (privacy).
       const forViewer = mapAsset(entity!, { auth: factory.auth({ user: { id: viewer.id } }) });
       const viewerPeopleIds = (forViewer.people ?? []).map((person) => person.id);
       expect(viewerPeopleIds).toContain(viewerPerson.id);
-      expect(viewerPeopleIds).toContain(ownerPerson.id);
+      expect(viewerPeopleIds).not.toContain(ownerPerson.id);
 
-      // A different user does not see the viewer's private person.
+      // The owner sees only their own person — never the viewer's.
       const forOwner = mapAsset(entity!, { auth: factory.auth({ user: { id: owner.id } }) });
       const ownerPeopleIds = (forOwner.people ?? []).map((person) => person.id);
       expect(ownerPeopleIds).toContain(ownerPerson.id);
