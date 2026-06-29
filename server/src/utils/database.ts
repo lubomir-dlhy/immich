@@ -150,6 +150,18 @@ export function withFacesAndPeople(
       )
       .selectAll('asset_face')
       .select((eb) => eb.table('person').$castTo<ShallowDehydrateObject<Person>>().as('person'))
+      // Fork: per-viewer person assignments linked via asset_face_person.
+      .select((eb) =>
+        jsonArrayFrom(
+          eb
+            .selectFrom('asset_face_person')
+            .innerJoin('person', 'person.id', 'asset_face_person.personId')
+            .selectAll('person')
+            .whereRef('asset_face_person.faceId', '=', 'asset_face.id'),
+        )
+          .$castTo<ShallowDehydrateObject<Person>[]>()
+          .as('people'),
+      )
       .whereRef('asset_face.assetId', '=', 'asset.id')
       .$if(!withDeletedFace, (qb) => qb.where('asset_face.deletedAt', 'is', null))
       .$if(!withHidden, (qb) => qb.where('asset_face.isVisible', 'is', true)),
@@ -160,13 +172,29 @@ export function hasPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personIds: 
   return qb.innerJoin(
     (eb) =>
       eb
-        .selectFrom('asset_face')
-        .select('assetId')
-        .where('personId', '=', anyUuid(personIds!))
-        .where('deletedAt', 'is', null)
-        .where('isVisible', 'is', true)
-        .groupBy('assetId')
-        .having((eb) => eb.fn.count('personId').distinct(), '=', personIds.length)
+        // Fork: union person links from the owner column and the shared join table,
+        // so searching by a person also matches faces recognized on shared assets.
+        .selectFrom((inner) =>
+          inner
+            .selectFrom('asset_face')
+            .select(['asset_face.assetId as assetId', 'asset_face.personId as personId'])
+            .where('asset_face.personId', 'is not', null)
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .unionAll(
+              inner
+                .selectFrom('asset_face_person')
+                .innerJoin('asset_face', 'asset_face.id', 'asset_face_person.faceId')
+                .select(['asset_face.assetId as assetId', 'asset_face_person.personId as personId'])
+                .where('asset_face.deletedAt', 'is', null)
+                .where('asset_face.isVisible', 'is', true),
+            )
+            .as('face_links'),
+        )
+        .select('face_links.assetId as assetId')
+        .where('face_links.personId', '=', anyUuid(personIds!))
+        .groupBy('face_links.assetId')
+        .having((eb) => eb.fn.count('face_links.personId').distinct(), '=', personIds.length)
         .as('has_people'),
     (join) => join.onRef('has_people.assetId', '=', 'asset.id'),
   );

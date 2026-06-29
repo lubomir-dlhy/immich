@@ -40,6 +40,7 @@ import {
   withFiles,
   withLibrary,
   withOwner,
+  withSharedAlbumAccess,
   withSmartSearch,
   withTagId,
   withTags,
@@ -77,6 +78,8 @@ interface AssetBuilderOptions {
   tagId?: string;
   personId?: string;
   userIds?: string[];
+  // Fork: also include assets shared with this user via albums (in addition to userIds).
+  sharedAlbumWithUserId?: string;
   withStacked?: boolean;
   exifInfo?: boolean;
   status?: AssetStatus;
@@ -732,7 +735,15 @@ export class AssetRepository {
               )
               .where((eb) => eb.or([eb('asset.stackId', 'is', null), eb(eb.table('stack'), 'is not', null)])),
           )
-          .$if(!!options.userIds, (qb) => qb.where('asset.ownerId', '=', anyUuid(options.userIds!)))
+          .$if(!!options.userIds, (qb) =>
+            qb.where((eb) => {
+              const ownerMatch = eb('asset.ownerId', '=', anyUuid(options.userIds!));
+              // Fork: for the person timeline, also include album-shared assets.
+              return options.sharedAlbumWithUserId
+                ? eb.or([ownerMatch, withSharedAlbumAccess(eb, options.sharedAlbumWithUserId)])
+                : ownerMatch;
+            }),
+          )
           .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
           .$if(!!options.assetType, (qb) => qb.where('asset.type', '=', options.assetType!))
           .$if(options.isDuplicate !== undefined, (qb) =>
@@ -816,7 +827,15 @@ export class AssetRepository {
             ),
           )
           .$if(!!options.personId, (qb) => hasPeople(qb, [options.personId!]))
-          .$if(!!options.userIds, (qb) => qb.where('asset.ownerId', '=', anyUuid(options.userIds!)))
+          .$if(!!options.userIds, (qb) =>
+            qb.where((eb) => {
+              const ownerMatch = eb('asset.ownerId', '=', anyUuid(options.userIds!));
+              // Fork: for the person timeline, also include album-shared assets.
+              return options.sharedAlbumWithUserId
+                ? eb.or([ownerMatch, withSharedAlbumAccess(eb, options.sharedAlbumWithUserId)])
+                : ownerMatch;
+            }),
+          )
           .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
           .$if(!!options.withStacked, (qb) =>
             qb

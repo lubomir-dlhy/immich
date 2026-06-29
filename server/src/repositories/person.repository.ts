@@ -153,7 +153,20 @@ export class PersonRepository {
     const items = await this.db
       .selectFrom('person')
       .selectAll('person')
-      .innerJoin('asset_face', 'asset_face.personId', 'person.id')
+      // Fork: match faces assigned via the owner column OR the shared join table.
+      .innerJoin('asset_face', (join) =>
+        join.on((eb) =>
+          eb.or([
+            eb('asset_face.personId', '=', eb.ref('person.id')),
+            eb.exists(
+              eb
+                .selectFrom('asset_face_person')
+                .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+                .whereRef('asset_face_person.personId', '=', 'person.id'),
+            ),
+          ]),
+        ),
+      )
       .innerJoin('asset', (join) =>
         join
           .onRef('asset_face.assetId', '=', 'asset.id')
@@ -209,7 +222,21 @@ export class PersonRepository {
     return this.db
       .selectFrom('person')
       .selectAll('person')
-      .leftJoin('asset_face', 'asset_face.personId', 'person.id')
+      // Fork: count faces from the owner column AND the shared join table, so a
+      // person whose faces are only on shared assets is not treated as faceless.
+      .leftJoin('asset_face', (join) =>
+        join.on((eb) =>
+          eb.or([
+            eb('asset_face.personId', '=', eb.ref('person.id')),
+            eb.exists(
+              eb
+                .selectFrom('asset_face_person')
+                .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+                .whereRef('asset_face_person.personId', '=', 'person.id'),
+            ),
+          ]),
+        ),
+      )
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
       .having((eb) => eb.fn.count('asset_face.assetId'), '=', 0)
@@ -248,7 +275,7 @@ export class PersonRepository {
   getFaceForFacialRecognitionJob(id: string) {
     return this.db
       .selectFrom('asset_face')
-      .select(['asset_face.id', 'asset_face.personId', 'asset_face.sourceType'])
+      .select(['asset_face.id', 'asset_face.assetId', 'asset_face.personId', 'asset_face.sourceType'])
       .select((eb) =>
         jsonObjectFrom(
           eb
@@ -286,6 +313,77 @@ export class PersonRepository {
       .where('person.id', '=', id)
       .where('asset_face.deletedAt', 'is', null)
       .executeTakeFirst();
+  }
+
+  /**
+   * Fork: users (other than the owner) who can access an asset via albums or
+   * partner sharing — the set for whom a detected face should also be recognized.
+   */
+  async getAdditionalAccessUserIds(assetId: string, ownerId: string): Promise<string[]> {
+    const albumRows = await this.db
+      .selectFrom('album_asset')
+      .innerJoin('album', (join) =>
+        join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null),
+      )
+      .leftJoin('album_user', 'album_user.albumId', 'album.id')
+      .where('album_asset.assetId', '=', assetId)
+      .select(['album.ownerId as albumOwnerId', 'album_user.userId as albumUserId'])
+      .execute();
+
+    const partnerRows = await this.db
+      .selectFrom('partner')
+      .where('partner.sharedById', '=', ownerId)
+      .select('partner.sharedWithId as userId')
+      .execute();
+
+    const userIds = new Set<string>();
+    for (const row of albumRows) {
+      if (row.albumOwnerId) {
+        userIds.add(row.albumOwnerId);
+      }
+      if (row.albumUserId) {
+        userIds.add(row.albumUserId);
+      }
+    }
+    for (const row of partnerRows) {
+      userIds.add(row.userId);
+    }
+    userIds.delete(ownerId);
+    return [...userIds];
+  }
+
+  /** Fork: whether a face is already linked to one of the user's people (idempotency guard). */
+  async hasFacePersonForUser(faceId: string, userId: string): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('asset_face_person')
+      .innerJoin('person', 'person.id', 'asset_face_person.personId')
+      .where('asset_face_person.faceId', '=', faceId)
+      .where('person.ownerId', '=', userId)
+      .select('asset_face_person.faceId')
+      .executeTakeFirst();
+    return !!row;
+  }
+
+  /** Fork: link a face to an additional (non-owner) viewer's person. */
+  async linkFacePerson({
+    faceId,
+    personId,
+    sourceType = SourceType.MachineLearning,
+  }: {
+    faceId: string;
+    personId: string;
+    sourceType?: SourceType;
+  }): Promise<void> {
+    await this.db
+      .insertInto('asset_face_person')
+      .values({ faceId, personId, sourceType })
+      .onConflict((oc) => oc.columns(['faceId', 'personId']).doNothing())
+      .execute();
+  }
+
+  /** Fork: clear shared face links of a given source (used on force re-recognition). */
+  async clearSharedFaceLinks(sourceType: SourceType): Promise<void> {
+    await this.db.deleteFrom('asset_face_person').where('sourceType', '=', sourceType).execute();
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
@@ -347,7 +445,18 @@ export class PersonRepository {
       .select((eb) => eb.fn.count(eb.fn('distinct', ['asset.id'])).as('count'))
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
-      .where('asset_face.personId', '=', personId)
+      // Fork: count faces assigned via the owner column OR the shared join table.
+      .where((eb) =>
+        eb.or([
+          eb('asset_face.personId', '=', personId),
+          eb.exists(
+            eb
+              .selectFrom('asset_face_person')
+              .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+              .where('asset_face_person.personId', '=', personId),
+          ),
+        ]),
+      )
       .executeTakeFirst();
 
     return {
@@ -364,7 +473,18 @@ export class PersonRepository {
         eb.exists((eb) =>
           eb
             .selectFrom('asset_face')
-            .whereRef('asset_face.personId', '=', 'person.id')
+            // Fork: faces assigned via the owner column OR the shared join table.
+            .where((eb) =>
+              eb.or([
+                eb('asset_face.personId', '=', eb.ref('person.id')),
+                eb.exists((eb) =>
+                  eb
+                    .selectFrom('asset_face_person')
+                    .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+                    .whereRef('asset_face_person.personId', '=', 'person.id'),
+                ),
+              ]),
+            )
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', '=', true)
             .where((eb) =>
@@ -486,7 +606,18 @@ export class PersonRepository {
     return this.db
       .selectFrom('asset_face')
       .selectAll('asset_face')
-      .where('asset_face.personId', '=', personId)
+      // Fork: a person's faces include those linked via the shared join table.
+      .where((eb) =>
+        eb.or([
+          eb('asset_face.personId', '=', personId),
+          eb.exists(
+            eb
+              .selectFrom('asset_face_person')
+              .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+              .where('asset_face_person.personId', '=', personId),
+          ),
+        ]),
+      )
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
       .executeTakeFirst();

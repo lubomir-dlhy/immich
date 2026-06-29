@@ -274,6 +274,8 @@ export type AssetFace = {
   personId: string | null;
   sourceType: SourceType;
   person?: ShallowDehydrateObject<Person> | null;
+  // Fork: additional per-viewer person assignments via asset_face_person.
+  people?: ShallowDehydrateObject<Person>[];
   updatedAt: Date;
   updateId: string;
   isVisible: boolean;

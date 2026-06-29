@@ -1,7 +1,9 @@
 import { Kysely } from 'kysely';
+import { mapAsset } from 'src/dtos/asset-response.dto';
 import { AssetOrder, AssetVisibility } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { newMediumService } from 'test/medium.factory';
@@ -24,6 +26,38 @@ beforeAll(async () => {
 });
 
 describe(AssetRepository.name, () => {
+  // Fork: a shared asset's faces carry per-viewer person links (asset_face_person).
+  describe('getById with shared faces (fork)', () => {
+    it('surfaces the viewer own person on a shared face, and hides it from others', async () => {
+      const { ctx, sut } = setup();
+      const personRepo = ctx.get(PersonRepository);
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+
+      const { asset } = await ctx.newAsset({ ownerId: owner.id });
+      const { person: ownerPerson } = await ctx.newPerson({ ownerId: owner.id, name: 'Owner Alice' });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerPerson.id });
+
+      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id, name: 'Viewer Alice' });
+      await personRepo.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
+
+      const entity = await sut.getById(asset.id, { faces: { person: true } });
+      expect(entity).toBeDefined();
+
+      // The viewer sees their own person (plus the owner's existing tag).
+      const forViewer = mapAsset(entity!, { auth: factory.auth({ user: { id: viewer.id } }) });
+      const viewerPeopleIds = (forViewer.people ?? []).map((person) => person.id);
+      expect(viewerPeopleIds).toContain(viewerPerson.id);
+      expect(viewerPeopleIds).toContain(ownerPerson.id);
+
+      // A different user does not see the viewer's private person.
+      const forOwner = mapAsset(entity!, { auth: factory.auth({ user: { id: owner.id } }) });
+      const ownerPeopleIds = (forOwner.people ?? []).map((person) => person.id);
+      expect(ownerPeopleIds).toContain(ownerPerson.id);
+      expect(ownerPeopleIds).not.toContain(viewerPerson.id);
+    });
+  });
+
   describe('getTimeBucket', () => {
     it('should order assets by local day first and fileCreatedAt within each day', async () => {
       const { ctx, sut } = setup();
@@ -76,6 +110,43 @@ describe(AssetRepository.name, () => {
           id: [previousLocalDayAsset.id, nextLocalDayEarlierAsset.id, nextLocalDayLaterAsset.id],
         }),
       );
+    });
+
+    // Fork: a person's timeline includes photos of them shared via albums.
+    it('includes shared-album assets containing the viewer person when sharedAlbumWithUserId is set', async () => {
+      const { ctx, sut } = setup();
+      const personRepo = ctx.get(PersonRepository);
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: viewer.id } });
+
+      const { asset } = await ctx.newAsset({
+        ownerId: owner.id,
+        fileCreatedAt: new Date('2026-03-08T23:30:00.000Z'),
+        localDateTime: new Date('2026-03-08T23:30:00.000Z'),
+      });
+      await ctx.newExif({ assetId: asset.id, timeZone: 'UTC' });
+      const { person: ownerPerson } = await ctx.newPerson({ ownerId: owner.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerPerson.id });
+
+      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id });
+      await personRepo.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
+
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
+
+      const options = {
+        personId: viewerPerson.id,
+        userIds: [viewer.id],
+        visibility: AssetVisibility.Timeline,
+      };
+
+      const withShared = await sut.getTimeBucket('2026-03-01', { ...options, sharedAlbumWithUserId: viewer.id }, auth);
+      expect(JSON.parse(withShared.assets).id ?? []).toContain(asset.id);
+
+      // Control: without the shared-album option, the shared asset is excluded.
+      const withoutShared = await sut.getTimeBucket('2026-03-01', options, auth);
+      expect(JSON.parse(withoutShared.assets).id ?? []).not.toContain(asset.id);
     });
   });
 

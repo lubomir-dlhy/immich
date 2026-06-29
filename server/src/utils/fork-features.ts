@@ -27,4 +27,11 @@ export const forkFeatures = {
    * Override: IMMICH_FORK_SHARED_ALBUM_SEARCH=false
    */
   sharedAlbumSearch: envFlag('IMMICH_FORK_SHARED_ALBUM_SEARCH', true),
+
+  /**
+   * Also recognize each detected face under the people catalogs of other users
+   * who can access the asset (album members, partners), not just the owner.
+   * Override: IMMICH_FORK_SHARED_FACE_RECOGNITION=false
+   */
+  sharedFaceRecognition: envFlag('IMMICH_FORK_SHARED_FACE_RECOGNITION', true),
 };
