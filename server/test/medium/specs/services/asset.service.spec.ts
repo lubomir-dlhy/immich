@@ -10,6 +10,7 @@ import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { OcrRepository } from 'src/repositories/ocr.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
 import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
 import { StackRepository } from 'src/repositories/stack.repository';
@@ -45,6 +46,36 @@ beforeAll(async () => {
 });
 
 describe(AssetService.name, () => {
+  // Fork: the official mobile app reads asset faces from GET /assets/:id -> people[].
+  // This proves that endpoint returns the viewer's own person on a shared asset,
+  // so the official app shows shared-album faces with no client change.
+  describe('get (shared-album people, fork)', () => {
+    it('returns the viewer own person on a shared asset', async () => {
+      const { sut, ctx } = setup();
+      const personRepo = ctx.get(PersonRepository);
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+
+      const { asset } = await ctx.newAsset({ ownerId: owner.id });
+      const { person: ownerPerson } = await ctx.newPerson({ ownerId: owner.id, name: 'Owner Alice' });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerPerson.id });
+      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id, name: 'Viewer Alice' });
+      await personRepo.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
+
+      // Share the asset with the viewer via an album (grants AssetRead access).
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
+
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const result = await sut.get(auth, asset.id);
+      const people = 'people' in result && result.people ? result.people : [];
+      const peopleIds = people.map((person) => person.id);
+      expect(peopleIds).toContain(viewerPerson.id);
+      // The owner's person is never exposed to the viewer.
+      expect(peopleIds).not.toContain(ownerPerson.id);
+    });
+  });
+
   describe('getStatistics', () => {
     it('should return stats as numbers, not strings', async () => {
       const { sut, ctx } = setup();

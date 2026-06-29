@@ -220,10 +220,13 @@ const peopleWithFaces = (
   };
 
   for (const face of faces) {
-    if (face.person) {
+    // When the viewer (auth) is known, only expose people they own — their own
+    // recognitions (owner column for their assets, or the per-viewer
+    // asset_face_person links on shared assets), never another user's people.
+    // Without auth there is no viewer context, so keep the base behavior.
+    if (face.person && (!auth || face.person.ownerId === auth.user.id)) {
       addFace(face.person, face);
     }
-    // Fork: also surface the viewer's own people linked to this face on shared assets.
     for (const person of face.people ?? []) {
       if (person && person.ownerId === auth?.user.id) {
         addFace(person, face);
