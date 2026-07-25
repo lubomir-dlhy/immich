@@ -65,9 +65,7 @@ export class PersonService extends BaseService {
       }
       closestFaceAssetId = person.faceAssetId;
     }
-    const { machineLearning } = await this.getConfig({ withCache: false });
     const { items, hasNextPage } = await this.personRepository.getAllForUser(pagination, auth.user.id, {
-      minimumFaceCount: machineLearning.facialRecognition.minFaces,
       withHidden,
       closestFaceAssetId,
     });
@@ -702,7 +700,7 @@ export class PersonService extends BaseService {
   // TODO return a asset face response
   async createFace(auth: AuthDto, dto: AssetFaceCreateDto): Promise<void> {
     await Promise.all([
-      this.requireAccess({ auth, permission: Permission.AssetRead, ids: [dto.assetId] }),
+      this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [dto.assetId] }),
       this.requireAccess({ auth, permission: Permission.PersonRead, ids: [dto.personId] }),
     ]);
 

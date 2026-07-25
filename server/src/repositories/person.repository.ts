@@ -1,19 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { ExpressionBuilder, Insertable, Kysely, Selectable, sql, Updateable } from 'kysely';
-import { jsonObjectFrom } from 'kysely/helpers/postgres';
+import { jsonArrayFrom, jsonObjectFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
 import { AssetFace } from 'src/database';
 import { Chunked, ChunkedArray, DummyValue, GenerateSql } from 'src/decorators';
-import { AssetFileType, AssetVisibility, SourceType } from 'src/enum';
+import { AssetFileType, AssetVisibility, SourceType, UserMetadataKey } from 'src/enum';
 import { DB } from 'src/schema';
 import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonTable } from 'src/schema/tables/person.table';
-import { removeUndefinedKeys, withFilePath } from 'src/utils/database';
+import { dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
 
 export interface PersonSearchOptions {
-  minimumFaceCount: number;
   withHidden: boolean;
   closestFaceAssetId?: string;
 }
@@ -67,6 +66,18 @@ const withPerson = (eb: ExpressionBuilder<DB, 'asset_face'>) => {
   return jsonObjectFrom(
     eb.selectFrom('person').selectAll('person').whereRef('person.id', '=', 'asset_face.personId'),
   ).as('person');
+};
+
+const withPeople = (eb: ExpressionBuilder<DB, 'asset_face'>) => {
+  return jsonArrayFrom(
+    eb
+      .selectFrom('asset_face_person')
+      .innerJoin('person', 'person.id', 'asset_face_person.personId')
+      .selectAll('person')
+      .whereRef('asset_face_person.faceId', '=', 'asset_face.id'),
+  )
+    .$castTo<NonNullable<AssetFace['people']>>()
+    .as('people');
 };
 
 const withFaceSearch = (eb: ExpressionBuilder<DB, 'asset_face'>) => {
@@ -181,7 +192,17 @@ export class PersonRepository {
       .having((eb) =>
         eb.or([
           eb('person.name', '!=', ''),
-          eb((innerEb) => innerEb.fn.count('asset_face.assetId'), '>=', options?.minimumFaceCount || 1),
+          eb(
+            (innerEb) => innerEb.fn.count('asset_face.assetId'),
+            '>=',
+            sql<number>`COALESCE(
+              (SELECT value -> 'people' ->> 'minimumFaces'
+              FROM user_metadata
+              WHERE "userId" = ${userId}
+                AND key = ${sql.lit(UserMetadataKey.Preferences)}),
+              '3'
+            )::int `,
+          ),
         ]),
       )
       .groupBy('person.id')
@@ -219,39 +240,42 @@ export class PersonRepository {
 
   @GenerateSql()
   getAllWithoutFaces() {
-    return this.db
-      .selectFrom('person')
-      .selectAll('person')
-      // Fork: count faces from the owner column AND the shared join table, so a
-      // person whose faces are only on shared assets is not treated as faceless.
-      .leftJoin('asset_face', (join) =>
-        join.on((eb) =>
-          eb.or([
-            eb('asset_face.personId', '=', eb.ref('person.id')),
-            eb.exists(
-              eb
-                .selectFrom('asset_face_person')
-                .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
-                .whereRef('asset_face_person.personId', '=', 'person.id'),
-            ),
-          ]),
-        ),
-      )
-      .where('asset_face.deletedAt', 'is', null)
-      .where('asset_face.isVisible', 'is', true)
-      .having((eb) => eb.fn.count('asset_face.assetId'), '=', 0)
-      .groupBy('person.id')
-      .execute();
+    return (
+      this.db
+        .selectFrom('person')
+        .selectAll('person')
+        // Fork: count faces from the owner column AND the shared join table, so a
+        // person whose faces are only on shared assets is not treated as faceless.
+        .leftJoin('asset_face', (join) =>
+          join.on((eb) =>
+            eb.or([
+              eb('asset_face.personId', '=', eb.ref('person.id')),
+              eb.exists(
+                eb
+                  .selectFrom('asset_face_person')
+                  .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+                  .whereRef('asset_face_person.personId', '=', 'person.id'),
+              ),
+            ]),
+          ),
+        )
+        .where('asset_face.deletedAt', 'is', null)
+        .where('asset_face.isVisible', 'is', true)
+        .having((eb) => eb.fn.count('asset_face.assetId'), '=', 0)
+        .groupBy('person.id')
+        .execute()
+    );
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  getFaces(assetId: string, options?: { isVisible?: boolean }) {
+  getFaces(assetId: string, options?: { isVisible?: boolean }): Promise<AssetFace[]> {
     const isVisible = options === undefined ? true : options.isVisible;
 
     return this.db
       .selectFrom('asset_face')
       .selectAll('asset_face')
       .select(withPerson)
+      .select(withPeople)
       .where('asset_face.assetId', '=', assetId)
       .where('asset_face.deletedAt', 'is', null)
       .$if(isVisible !== undefined, (qb) => qb.where('asset_face.isVisible', '=', isVisible!))
@@ -325,9 +349,9 @@ export class PersonRepository {
       .innerJoin('album', (join) =>
         join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null),
       )
-      .leftJoin('album_user', 'album_user.albumId', 'album.id')
+      .innerJoin('album_user', 'album_user.albumId', 'album.id')
       .where('album_asset.assetId', '=', assetId)
-      .select(['album.ownerId as albumOwnerId', 'album_user.userId as albumUserId'])
+      .select('album_user.userId')
       .execute();
 
     const partnerRows = await this.db
@@ -338,12 +362,7 @@ export class PersonRepository {
 
     const userIds = new Set<string>();
     for (const row of albumRows) {
-      if (row.albumOwnerId) {
-        userIds.add(row.albumOwnerId);
-      }
-      if (row.albumUserId) {
-        userIds.add(row.albumUserId);
-      }
+      userIds.add(row.userId);
     }
     for (const row of partnerRows) {
       userIds.add(row.userId);
@@ -538,7 +557,7 @@ export class PersonRepository {
       (query as any) = query.with('added_embeddings', (db) => db.insertInto('face_search').values(embeddingsToAdd));
     }
 
-    await query.selectFrom(sql`(select 1)`.as('dummy')).execute();
+    await query.selectFrom(dummy).execute();
   }
 
   async update(person: Updateable<PersonTable> & { id: string }) {
@@ -603,24 +622,26 @@ export class PersonRepository {
 
   @GenerateSql({ params: [DummyValue.UUID] })
   getRandomFace(personId: string) {
-    return this.db
-      .selectFrom('asset_face')
-      .selectAll('asset_face')
-      // Fork: a person's faces include those linked via the shared join table.
-      .where((eb) =>
-        eb.or([
-          eb('asset_face.personId', '=', personId),
-          eb.exists(
-            eb
-              .selectFrom('asset_face_person')
-              .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
-              .where('asset_face_person.personId', '=', personId),
-          ),
-        ]),
-      )
-      .where('asset_face.deletedAt', 'is', null)
-      .where('asset_face.isVisible', 'is', true)
-      .executeTakeFirst();
+    return (
+      this.db
+        .selectFrom('asset_face')
+        .selectAll('asset_face')
+        // Fork: a person's faces include those linked via the shared join table.
+        .where((eb) =>
+          eb.or([
+            eb('asset_face.personId', '=', personId),
+            eb.exists(
+              eb
+                .selectFrom('asset_face_person')
+                .whereRef('asset_face_person.faceId', '=', 'asset_face.id')
+                .where('asset_face_person.personId', '=', personId),
+            ),
+          ]),
+        )
+        .where('asset_face.deletedAt', 'is', null)
+        .where('asset_face.isVisible', 'is', true)
+        .executeTakeFirst()
+    );
   }
 
   @GenerateSql()

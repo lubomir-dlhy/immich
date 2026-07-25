@@ -101,7 +101,6 @@ describe(PersonRepository.name, () => {
     it('getAllForUser includes a person whose faces are only shared', async () => {
       const { sut, viewer, viewerPerson } = await setupSharedFace();
       const { items } = await sut.getAllForUser({ take: 100, skip: 0 }, viewer.id, {
-        minimumFaceCount: 1,
         withHidden: true,
       });
       expect(items.map((p) => p.id)).toContain(viewerPerson.id);
@@ -109,9 +108,7 @@ describe(PersonRepository.name, () => {
 
     it('getNumberOfPeople counts a shared-only person', async () => {
       const { sut, viewer } = await setupSharedFace();
-      await expect(sut.getNumberOfPeople(viewer.id)).resolves.toEqual(
-        expect.objectContaining({ total: 1 }),
-      );
+      await expect(sut.getNumberOfPeople(viewer.id)).resolves.toEqual(expect.objectContaining({ total: 1 }));
     });
 
     it('getAllWithoutFaces does NOT flag a shared-only person (cleanup safety)', async () => {
