@@ -3,7 +3,7 @@ import { Insertable, Updateable } from 'kysely';
 import { MachineLearningConfig } from 'src/config';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { Person } from 'src/database';
-import { Chunked, OnJob } from 'src/decorators';
+import { Chunked, OnEvent, OnJob } from 'src/decorators';
 import { BulkIdErrorReason, BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
@@ -35,6 +35,7 @@ import {
   SystemMetadataKey,
   VectorIndex,
 } from 'src/enum';
+import { ArgOf } from 'src/repositories/event.repository';
 import { BoundingBox } from 'src/repositories/machine-learning.repository';
 import { UpdateFacesData } from 'src/repositories/person.repository';
 import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
@@ -50,6 +51,20 @@ import { Point, transformPoints } from 'src/utils/transform';
 
 @Injectable()
 export class PersonService extends BaseService {
+  @OnEvent({ name: 'SharedFaceAccessChanged' })
+  async onSharedFaceAccessChanged({ action, ...options }: ArgOf<'SharedFaceAccessChanged'>): Promise<void> {
+    if (!forkFeatures.sharedFaceRecognition) {
+      return;
+    }
+
+    if (action === 'revoke') {
+      await this.cleanupSharedFaceAccess();
+      return;
+    }
+
+    await this.queueSharedFaceRecognition(options);
+  }
+
   async getAll(auth: AuthDto, dto: PersonSearchDto): Promise<PeopleResponseDto> {
     const { withHidden = false, closestAssetId, closestPersonId, page, size } = dto;
     let closestFaceAssetId = closestAssetId;
@@ -436,15 +451,54 @@ export class PersonService extends BaseService {
       return JobStatus.Skipped;
     }
 
+    if (forkFeatures.sharedFaceRecognition) {
+      await this.cleanupSharedFaceAccess();
+    }
+
     await this.databaseRepository.prewarm(VectorIndex.Face);
 
     const lastRun = new Date().toISOString();
-    const facePagination = this.personRepository.getAllFaces(
-      force ? undefined : { personId: null, sourceType: SourceType.MachineLearning },
+    const seenFaceIds = new Set<string>();
+    let jobs: { name: JobName.FacialRecognition; data: { id: string; deferred: false } }[] = [];
+    const queueFaces = async (faces: AsyncIterable<{ id: string }>) => {
+      for await (const face of faces) {
+        if (seenFaceIds.has(face.id)) {
+          continue;
+        }
+        seenFaceIds.add(face.id);
+        jobs.push({ name: JobName.FacialRecognition, data: { id: face.id, deferred: false } });
+
+        if (jobs.length === JOBS_ASSET_PAGINATION_SIZE) {
+          await this.jobRepository.queueAll(jobs);
+          jobs = [];
+        }
+      }
+    };
+
+    await queueFaces(
+      this.personRepository.getAllFaces(force ? undefined : { personId: null, sourceType: SourceType.MachineLearning }),
     );
 
+    // A manual "Missing" run is also the safe global backfill for faces on
+    // already-shared assets. Nightly/new-face processing is handled incrementally.
+    if (forkFeatures.sharedFaceRecognition && !force && !nightly) {
+      await queueFaces(this.personRepository.getFacesForSharedRecognition());
+    }
+
+    await this.jobRepository.queueAll(jobs);
+
+    await this.systemMetadataRepository.set(SystemMetadataKey.FacialRecognitionState, { lastRun });
+
+    return JobStatus.Success;
+  }
+
+  private async queueSharedFaceRecognition(options: {
+    assetIds?: string[];
+    albumId?: string;
+    ownerId?: string;
+  }): Promise<void> {
     let jobs: { name: JobName.FacialRecognition; data: { id: string; deferred: false } }[] = [];
-    for await (const face of facePagination) {
+    for await (const face of this.personRepository.getFacesForSharedRecognition(options)) {
       jobs.push({ name: JobName.FacialRecognition, data: { id: face.id, deferred: false } });
 
       if (jobs.length === JOBS_ASSET_PAGINATION_SIZE) {
@@ -454,10 +508,20 @@ export class PersonService extends BaseService {
     }
 
     await this.jobRepository.queueAll(jobs);
+  }
 
-    await this.systemMetadataRepository.set(SystemMetadataKey.FacialRecognitionState, { lastRun });
-
-    return JobStatus.Success;
+  private async cleanupSharedFaceAccess(): Promise<void> {
+    const affectedPersonIds = await this.personRepository.deleteSharedFaceLinksWithoutAccess();
+    for (const personId of affectedPersonIds) {
+      const face = await this.personRepository.getRandomFace(personId);
+      if (face) {
+        await this.personRepository.update({ id: personId, faceAssetId: face.id });
+        await this.jobRepository.queue({ name: JobName.PersonGenerateThumbnail, data: { id: personId } });
+      }
+    }
+    if (affectedPersonIds.length > 0) {
+      await this.handlePersonCleanup();
+    }
   }
 
   @OnJob({ name: JobName.FacialRecognition, queue: QueueName.FacialRecognition })
@@ -483,11 +547,6 @@ export class PersonService extends BaseService {
       return JobStatus.Failed;
     }
 
-    if (face.personId) {
-      this.logger.debug(`Face ${id} already has a person assigned`);
-      return JobStatus.Skipped;
-    }
-
     // Fork: also recognize this face under each additional user who can access the
     // asset (album members, partners), into their own people catalog. Runs before
     // the owner pass so it is unaffected by the owner's early-skip/defer paths.
@@ -502,6 +561,11 @@ export class PersonService extends BaseService {
       for (const userId of accessUserIds) {
         await this.recognizeFaceForUser(sharedFace, userId, machineLearning);
       }
+    }
+
+    if (face.personId) {
+      this.logger.debug(`Face ${id} already has an owner person assigned`);
+      return JobStatus.Skipped;
     }
 
     const matches = await this.searchRepository.searchFaces({

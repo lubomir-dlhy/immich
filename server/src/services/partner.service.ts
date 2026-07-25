@@ -17,6 +17,7 @@ export class PartnerService extends BaseService {
     }
 
     const partner = await this.partnerRepository.create(partnerId);
+    await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', ownerId: auth.user.id });
     return this.mapPartner(partner, PartnerDirection.SharedBy);
   }
 
@@ -28,6 +29,7 @@ export class PartnerService extends BaseService {
     }
 
     await this.partnerRepository.remove(partnerId);
+    await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'revoke' });
   }
 
   async search(auth: AuthDto, { direction }: PartnerSearchDto): Promise<PartnerResponseDto[]> {

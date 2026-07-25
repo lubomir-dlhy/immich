@@ -30,6 +30,9 @@ describe(PersonService.name, () => {
     ({ sut, mocks } = newTestService(PersonService));
     // Fork: default to no additional accessing users for per-viewer recognition.
     mocks.person.getAdditionalAccessUserIds.mockResolvedValue([]);
+    mocks.person.getFacesForSharedRecognition.mockReturnValue(makeStream([]));
+    mocks.person.deleteSharedFaceLinksWithoutAccess.mockResolvedValue([]);
+    mocks.person.getAllWithoutFaces.mockResolvedValue([]);
   });
 
   it('should be defined', () => {
@@ -708,6 +711,7 @@ describe(PersonService.name, () => {
         personId: null,
         sourceType: SourceType.MachineLearning,
       });
+      expect(mocks.person.getFacesForSharedRecognition).toHaveBeenCalledWith();
       expect(mocks.job.queueAll).toHaveBeenCalledWith([
         {
           name: JobName.FacialRecognition,
@@ -718,6 +722,30 @@ describe(PersonService.name, () => {
         lastRun: expect.any(String),
       });
       expect(mocks.person.vacuum).not.toHaveBeenCalled();
+    });
+
+    it('fork: safely backfills assigned faces on shared assets without duplicate jobs', async () => {
+      const face = AssetFaceFactory.from().person().build();
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 0,
+        waiting: 0,
+        paused: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+      });
+      mocks.person.getAllFaces.mockReturnValue(makeStream([face]));
+      mocks.person.getFacesForSharedRecognition.mockReturnValue(makeStream([face]));
+
+      await sut.handleQueueRecognizeFaces({});
+
+      expect(mocks.person.deleteSharedFaceLinksWithoutAccess).toHaveBeenCalled();
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([
+        {
+          name: JobName.FacialRecognition,
+          data: { id: face.id, deferred: false },
+        },
+      ]);
     });
 
     it('should queue all assets', async () => {
@@ -834,6 +862,42 @@ describe(PersonService.name, () => {
       expect(mocks.person.delete).toHaveBeenCalledWith([person.id]);
       expect(mocks.storage.unlink).toHaveBeenCalledWith(person.thumbnailPath);
       expect(mocks.person.vacuum).toHaveBeenCalledWith({ reindexVectors: false });
+    });
+  });
+
+  describe('onSharedFaceAccessChanged', () => {
+    it('fork: queues faces affected by newly granted album access', async () => {
+      const face = AssetFaceFactory.from().person().build();
+      mocks.person.getFacesForSharedRecognition.mockReturnValue(makeStream([face]));
+
+      await sut.onSharedFaceAccessChanged({ action: 'grant', albumId: 'album-1' });
+
+      expect(mocks.person.getFacesForSharedRecognition).toHaveBeenCalledWith({ albumId: 'album-1' });
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([
+        { name: JobName.FacialRecognition, data: { id: face.id, deferred: false } },
+      ]);
+    });
+
+    it('fork: removes viewer links after access is revoked', async () => {
+      await sut.onSharedFaceAccessChanged({ action: 'revoke' });
+
+      expect(mocks.person.deleteSharedFaceLinksWithoutAccess).toHaveBeenCalled();
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    });
+
+    it('fork: replaces a feature face removed by access cleanup', async () => {
+      const replacement = AssetFaceFactory.create();
+      mocks.person.deleteSharedFaceLinksWithoutAccess.mockResolvedValue(['person-1']);
+      mocks.person.getRandomFace.mockResolvedValue(replacement);
+
+      await sut.onSharedFaceAccessChanged({ action: 'revoke' });
+
+      expect(mocks.person.update).toHaveBeenCalledWith({ id: 'person-1', faceAssetId: replacement.id });
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.PersonGenerateThumbnail,
+        data: { id: 'person-1' },
+      });
+      expect(mocks.person.getAllWithoutFaces).toHaveBeenCalled();
     });
   });
 
@@ -1008,6 +1072,25 @@ describe(PersonService.name, () => {
 
       expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
       expect(mocks.person.create).not.toHaveBeenCalled();
+    });
+
+    it('fork: recognizes shared viewers even if the owner person is already assigned', async () => {
+      const asset = AssetFactory.create();
+      const face = AssetFaceFactory.from({ assetId: asset.id }).person().build();
+      const viewerMatch = AssetFaceFactory.from().person().build();
+      mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } });
+      mocks.person.getFaceForFacialRecognitionJob.mockResolvedValue(getForFacialRecognitionJob(face, asset));
+      mocks.person.getAdditionalAccessUserIds.mockResolvedValue(['viewer']);
+      mocks.person.hasFacePersonForUser.mockResolvedValue(false);
+      mocks.search.searchFaces.mockResolvedValue([{ ...viewerMatch, distance: 0.2 }] as FaceSearchResult[]);
+
+      await expect(sut.handleRecognizeFaces({ id: face.id })).resolves.toBe(JobStatus.Skipped);
+
+      expect(mocks.person.linkFacePerson).toHaveBeenCalledWith({
+        faceId: face.id,
+        personId: viewerMatch.person!.id,
+      });
+      expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
     });
 
     it('should match existing person', async () => {

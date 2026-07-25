@@ -40,6 +40,14 @@ type EventMap = {
   // album events
   AlbumUpdate: [{ id: string; recipientId: string }];
   AlbumInvite: [{ id: string; userId: string; senderName: string }];
+  SharedFaceAccessChanged: [
+    {
+      action: 'grant' | 'revoke';
+      assetIds?: string[];
+      albumId?: string;
+      ownerId?: string;
+    },
+  ];
 
   // asset events
   AssetCreate: [{ asset: Asset; file: UploadFile }];

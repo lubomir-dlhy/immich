@@ -244,11 +244,15 @@ describe(AlbumService.name, () => {
       expect(mocks.user.get).toHaveBeenCalledWith(albumUser.userId, {});
       expect(mocks.user.getMetadata).toHaveBeenCalledWith(owner.id);
       expect(mocks.access.asset.checkOwnerAccess).toHaveBeenCalledWith(owner.id, new Set([assetId]), false);
-      expect(mocks.event.emit).toHaveBeenCalledTimes(1);
+      expect(mocks.event.emit).toHaveBeenCalledTimes(2);
       expect(mocks.event.emit).toHaveBeenCalledWith('AlbumInvite', {
         id: album.id,
         userId: albumUser.userId,
         senderName: owner.name,
+      });
+      expect(mocks.event.emit).toHaveBeenCalledWith('SharedFaceAccessChanged', {
+        action: 'grant',
+        albumId: album.id,
       });
     });
 
@@ -560,11 +564,15 @@ describe(AlbumService.name, () => {
         userId: user.id,
         albumId: album.id,
       });
-      expect(mocks.event.emit).toHaveBeenCalledTimes(1);
+      expect(mocks.event.emit).toHaveBeenCalledTimes(2);
       expect(mocks.event.emit).toHaveBeenCalledWith('AlbumInvite', {
         id: album.id,
         userId: user.id,
         senderName: owner.name,
+      });
+      expect(mocks.event.emit).toHaveBeenCalledWith('SharedFaceAccessChanged', {
+        action: 'grant',
+        albumId: album.id,
       });
     });
   });

@@ -62,6 +62,10 @@ describe(PartnerService.name, () => {
         sharedById: partner.sharedById,
         sharedWithId: partner.sharedWithId,
       });
+      expect(mocks.event.emit).toHaveBeenCalledWith('SharedFaceAccessChanged', {
+        action: 'grant',
+        ownerId: user1.id,
+      });
     });
 
     it('should throw an error when the partner already exists', async () => {
@@ -90,6 +94,7 @@ describe(PartnerService.name, () => {
       await sut.remove(auth, user2.id);
 
       expect(mocks.partner.remove).toHaveBeenCalledWith({ sharedById: user1.id, sharedWithId: user2.id });
+      expect(mocks.event.emit).toHaveBeenCalledWith('SharedFaceAccessChanged', { action: 'revoke' });
     });
 
     it('should throw an error when the partner does not exist', async () => {

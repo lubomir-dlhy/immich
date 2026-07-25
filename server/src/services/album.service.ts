@@ -132,6 +132,9 @@ export class AlbumService extends BaseService {
     for (const { userId } of albumUsers) {
       await this.eventRepository.emit('AlbumInvite', { id: album.id, userId, senderName: auth.user.name });
     }
+    if (albumUsers.length > 0 && assetIds.length > 0) {
+      await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', albumId: album.id });
+    }
 
     return mapAlbum(album);
   }
@@ -166,6 +169,7 @@ export class AlbumService extends BaseService {
   async delete(auth: AuthDto, id: string): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.AlbumDelete, ids: [id] });
     await this.albumRepository.delete(id);
+    await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'revoke' });
   }
 
   async addAssets(auth: AuthDto, id: string, dto: BulkIdsDto): Promise<BulkIdResponseDto[]> {
@@ -195,6 +199,9 @@ export class AlbumService extends BaseService {
       for (const recipientId of allUsersExceptUs) {
         await this.eventRepository.emit('AlbumUpdate', { id, recipientId });
       }
+
+      const addedAssetIds = results.filter(({ success }) => success).map(({ id }) => id);
+      await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', assetIds: addedAssetIds });
     }
 
     return results;
@@ -251,6 +258,12 @@ export class AlbumService extends BaseService {
     }
 
     await this.albumRepository.addAssetIdsToAlbums(albumAssetValues);
+    if (albumAssetValues.length > 0) {
+      await this.eventRepository.emit('SharedFaceAccessChanged', {
+        action: 'grant',
+        assetIds: [...new Set(albumAssetValues.map(({ assetId }) => assetId))],
+      });
+    }
     for (const event of events) {
       for (const recipientId of event.recipients) {
         await this.eventRepository.emit('AlbumUpdate', { id: event.id, recipientId });
@@ -274,6 +287,9 @@ export class AlbumService extends BaseService {
     if (removedIds.length > 0 && album.albumThumbnailAssetId && removedIds.includes(album.albumThumbnailAssetId)) {
       await this.albumRepository.updateThumbnails();
     }
+    if (removedIds.length > 0) {
+      await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'revoke' });
+    }
 
     return results;
   }
@@ -283,6 +299,7 @@ export class AlbumService extends BaseService {
 
     const album = await this.findOrFail(id, auth.user.id, { withAssets: false });
 
+    let userAdded = false;
     for (const { userId, role } of albumUsers) {
       if (role === AlbumUserRole.Owner) {
         throw new BadRequestException('Cannot add another owner');
@@ -300,7 +317,11 @@ export class AlbumService extends BaseService {
       }
 
       await this.albumUserRepository.create({ userId, albumId: id, role });
+      userAdded = true;
       await this.eventRepository.emit('AlbumInvite', { id, userId, senderName: auth.user.name });
+    }
+    if (userAdded) {
+      await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', albumId: id });
     }
 
     return this.findOrFail(id, auth.user.id, { withAssets: true }).then(mapAlbum);
@@ -331,6 +352,7 @@ export class AlbumService extends BaseService {
     }
 
     await this.albumUserRepository.delete({ albumId: id, userId });
+    await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'revoke' });
   }
 
   async updateUser(auth: AuthDto, id: string, userId: string, dto: UpdateAlbumUserDto): Promise<void> {

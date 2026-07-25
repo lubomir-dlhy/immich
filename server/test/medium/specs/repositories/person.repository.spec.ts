@@ -140,5 +140,66 @@ describe(PersonRepository.name, () => {
       expect(userIds).not.toContain(owner.id);
       expect(userIds).not.toContain(stranger.id);
     });
+
+    it('streams existing assigned faces when an album grants viewer access', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: owner.id });
+      const { person } = await ctx.newPerson({ ownerId: owner.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
+
+      const faces = [];
+      for await (const face of sut.getFacesForSharedRecognition({ albumId: album.id })) {
+        faces.push(face);
+      }
+
+      expect(faces.map(({ id }) => id)).toContain(assetFace.id);
+    });
+
+    it('deletes a shared face link after the viewer loses their final access path', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: owner.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id });
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
+      await sut.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
+
+      await ctx.database
+        .deleteFrom('album_user')
+        .where('albumId', '=', album.id)
+        .where('userId', '=', viewer.id)
+        .execute();
+      await sut.deleteSharedFaceLinksWithoutAccess();
+
+      await expect(sut.hasFacePersonForUser(assetFace.id, viewer.id)).resolves.toBe(false);
+    });
+
+    it('keeps a shared face link while another partner access path remains', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: owner.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id });
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
+      await ctx.newPartner({ sharedById: owner.id, sharedWithId: viewer.id });
+      await sut.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
+
+      await ctx.database
+        .deleteFrom('album_user')
+        .where('albumId', '=', album.id)
+        .where('userId', '=', viewer.id)
+        .execute();
+      await sut.deleteSharedFaceLinksWithoutAccess();
+
+      await expect(sut.hasFacePersonForUser(assetFace.id, viewer.id)).resolves.toBe(true);
+    });
   });
 });

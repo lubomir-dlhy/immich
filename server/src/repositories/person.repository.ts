@@ -58,6 +58,12 @@ export interface GetAllFacesOptions {
   sourceType?: SourceType;
 }
 
+export interface GetSharedFacesOptions {
+  assetIds?: string[];
+  albumId?: string;
+  ownerId?: string;
+}
+
 export type UnassignFacesOptions = DeleteFacesOptions;
 
 export type SelectFaceOptions = (keyof Selectable<AssetFaceTable>)[];
@@ -134,6 +140,58 @@ export class PersonRepository {
       .$if(!!options.assetId, (qb) => qb.where('asset_face.assetId', '=', options.assetId!))
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
+      .stream();
+  }
+
+  /**
+   * Fork: stream faces on assets that currently have at least one non-owner
+   * user with album or partner access. Optional filters make sharing mutations
+   * queue only the faces affected by that mutation.
+   */
+  getFacesForSharedRecognition(options: GetSharedFacesOptions = {}) {
+    return this.db
+      .selectFrom('asset_face')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .selectAll('asset_face')
+      .where('asset_face.sourceType', '=', SourceType.MachineLearning)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', 'is', true)
+      .$if(options.assetIds !== undefined, (qb) => qb.where('asset_face.assetId', 'in', options.assetIds!))
+      .$if(!!options.albumId, (qb) =>
+        qb.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('album_asset')
+              .whereRef('album_asset.assetId', '=', 'asset.id')
+              .where('album_asset.albumId', '=', options.albumId!)
+              .select('album_asset.assetId'),
+          ),
+        ),
+      )
+      .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', options.ownerId!))
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('album_asset')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_user', 'album_user.albumId', 'album.id')
+              .whereRef('album_asset.assetId', '=', 'asset.id')
+              .whereRef('album_user.userId', '!=', 'asset.ownerId')
+              .select('album_asset.assetId'),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('partner')
+              .whereRef('partner.sharedById', '=', 'asset.ownerId')
+              .whereRef('partner.sharedWithId', '!=', 'asset.ownerId')
+              .where('asset.visibility', 'in', [AssetVisibility.Timeline, AssetVisibility.Hidden])
+              .select('partner.sharedById'),
+          ),
+        ]),
+      )
       .stream();
   }
 
@@ -356,6 +414,12 @@ export class PersonRepository {
 
     const partnerRows = await this.db
       .selectFrom('partner')
+      .innerJoin('asset', (join) =>
+        join
+          .onRef('asset.ownerId', '=', 'partner.sharedById')
+          .on('asset.id', '=', assetId)
+          .on('asset.visibility', 'in', [AssetVisibility.Timeline, AssetVisibility.Hidden]),
+      )
       .where('partner.sharedById', '=', ownerId)
       .select('partner.sharedWithId as userId')
       .execute();
@@ -403,6 +467,53 @@ export class PersonRepository {
   /** Fork: clear shared face links of a given source (used on force re-recognition). */
   async clearSharedFaceLinks(sourceType: SourceType): Promise<void> {
     await this.db.deleteFrom('asset_face_person').where('sourceType', '=', sourceType).execute();
+  }
+
+  /**
+   * Fork: remove per-viewer links whose person owner can no longer access the
+   * underlying asset through any album or partner relationship.
+   */
+  async deleteSharedFaceLinksWithoutAccess(): Promise<string[]> {
+    const removed = await this.db
+      .deleteFrom('asset_face_person')
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('asset_face')
+              .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+              .innerJoin('person', 'person.id', 'asset_face_person.personId')
+              .whereRef('asset_face.id', '=', 'asset_face_person.faceId')
+              .where((eb) =>
+                eb.or([
+                  eb.exists(
+                    eb
+                      .selectFrom('album_asset')
+                      .innerJoin('album', (join) =>
+                        join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null),
+                      )
+                      .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                      .whereRef('album_asset.assetId', '=', 'asset.id')
+                      .whereRef('album_user.userId', '=', 'person.ownerId')
+                      .select('album_asset.assetId'),
+                  ),
+                  eb.exists(
+                    eb
+                      .selectFrom('partner')
+                      .whereRef('partner.sharedById', '=', 'asset.ownerId')
+                      .whereRef('partner.sharedWithId', '=', 'person.ownerId')
+                      .where('asset.visibility', 'in', [AssetVisibility.Timeline, AssetVisibility.Hidden])
+                      .select('partner.sharedById'),
+                  ),
+                ]),
+              )
+              .select('asset_face.id'),
+          ),
+        ),
+      )
+      .returning('personId')
+      .execute();
+    return [...new Set(removed.map(({ personId }) => personId))];
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
