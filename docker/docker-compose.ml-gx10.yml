@@ -1,0 +1,27 @@
+name: immich-ml-gx10
+
+services:
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    image: immich-machine-learning:v2.5.2-cuda-arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.ml-cuda-arm64
+    ports:
+      - 192.168.2.4:3003:3003
+    volumes:
+      - model-cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu
+    restart: unless-stopped
+    healthcheck:
+      disable: false
+
+volumes:
+  model-cache:

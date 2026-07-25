@@ -1,0 +1,111 @@
+ARG IMMICH_VERSION=v2.5.2
+ARG CUDA_DEVEL_IMAGE=nvcr.io/nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04
+ARG CUDA_RUNTIME_IMAGE=nvcr.io/nvidia/cuda:13.0.1-cudnn-runtime-ubuntu24.04
+
+FROM ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION} AS immich
+
+FROM ${CUDA_DEVEL_IMAGE} AS ort-builder
+
+ARG ORT_VERSION=v1.26.0
+
+COPY --from=immich /usr/local/bin/python3.11 /usr/local/bin/python3.11
+COPY --from=immich /usr/local/bin/python3 /usr/local/bin/python3
+COPY --from=immich /usr/local/bin/python /usr/local/bin/python
+COPY --from=immich /usr/local/include/python3.11 /usr/local/include/python3.11
+COPY --from=immich /usr/local/lib/python3.11 /usr/local/lib/python3.11
+COPY --from=immich /usr/local/lib/libpython3.11.so.1.0 /usr/local/lib/libpython3.11.so.1.0
+COPY --from=immich /usr/local/lib/libpython3.11.so /usr/local/lib/libpython3.11.so
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+      build-essential \
+      ca-certificates \
+      ccache \
+      cmake \
+      git \
+      ninja-build \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m ensurepip \
+    && python -m pip install --no-cache-dir numpy packaging setuptools wheel
+
+WORKDIR /build
+RUN git clone \
+      --branch "${ORT_VERSION}" \
+      --depth 1 \
+      --recurse-submodules \
+      --shallow-submodules \
+      https://github.com/microsoft/onnxruntime.git
+
+WORKDIR /build/onnxruntime
+RUN --mount=type=cache,id=ort-build-arm64-cuda130-sm121,target=/build/output \
+    ./build.sh \
+      --allow_running_as_root \
+      --build \
+      --build_dir /build/output \
+      --build_wheel \
+      --cmake_generator Ninja \
+      --cmake_extra_defines CMAKE_CUDA_ARCHITECTURES=121 onnxruntime_QUICK_BUILD=ON \
+      --compile_no_warning_as_error \
+      --config Release \
+      --cuda_home /usr/local/cuda \
+      --cudnn_home /usr/local/cuda \
+      --disable_generation_ops \
+      --parallel 16 \
+      --skip_tests \
+      --update \
+      --use_cuda \
+    && mkdir -p /tmp/ort-wheel \
+    && cp /build/output/Release/dist/*.whl /tmp/ort-wheel/
+
+FROM ${CUDA_RUNTIME_IMAGE}
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+      ca-certificates \
+      libgl1 \
+      libglib2.0-0 \
+      libgomp1 \
+      libmimalloc2.0 \
+      tini \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=immich /usr/local/bin/python3.11 /usr/local/bin/python3.11
+COPY --from=immich /usr/local/bin/python3 /usr/local/bin/python3
+COPY --from=immich /usr/local/bin/python /usr/local/bin/python
+COPY --from=immich /usr/local/lib/python3.11 /usr/local/lib/python3.11
+COPY --from=immich /usr/local/lib/libpython3.11.so.1.0 /usr/local/lib/libpython3.11.so.1.0
+COPY --from=immich /usr/local/lib/libpython3.11.so /usr/local/lib/libpython3.11.so
+COPY --from=immich /opt/venv /opt/venv
+COPY --from=immich /usr/src /usr/src
+COPY --from=ort-builder /tmp/ort-wheel /tmp/ort-wheel
+
+RUN /opt/venv/bin/python -m ensurepip \
+    && /opt/venv/bin/python -m pip uninstall --yes onnxruntime onnxruntime-gpu \
+    && /opt/venv/bin/python -m pip install \
+      --no-cache-dir \
+      --no-deps \
+      /tmp/ort-wheel/*.whl \
+    && /opt/venv/bin/python -c \
+      "import onnxruntime as ort; assert 'CUDAExecutionProvider' in ort.get_available_providers(), ort.get_available_providers()" \
+    && ln -s /usr/lib/aarch64-linux-gnu/libmimalloc.so.2 /usr/lib/libmimalloc.so.2 \
+    && rm -r /tmp/ort-wheel
+
+WORKDIR /usr/src
+
+ENV DEVICE=cuda \
+    LD_PRELOAD=/usr/lib/libmimalloc.so.2 \
+    MACHINE_LEARNING_CACHE_FOLDER=/cache \
+    MACHINE_LEARNING_MODEL_ARENA=false \
+    PATH=/opt/venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/usr/src \
+    PYTHONUNBUFFERED=1 \
+    TRANSFORMERS_CACHE=/cache \
+    VIRTUAL_ENV=/opt/venv
+
+ENTRYPOINT ["tini", "--"]
+CMD ["python", "-m", "immich_ml"]
+HEALTHCHECK CMD python3 healthcheck.py
