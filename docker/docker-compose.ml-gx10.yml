@@ -3,7 +3,7 @@ name: immich-ml-gx10
 services:
   immich-machine-learning:
     container_name: immich_machine_learning
-    image: immich-machine-learning:v2.5.2-cuda-arm64
+    image: immich-machine-learning:v3.0.3-cuda-arm64
     build:
       context: .
       dockerfile: Dockerfile.ml-cuda-arm64

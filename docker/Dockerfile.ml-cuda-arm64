@@ -1,4 +1,4 @@
-ARG IMMICH_VERSION=v2.5.2
+ARG IMMICH_VERSION=v3.0.3
 ARG CUDA_DEVEL_IMAGE=nvcr.io/nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04
 ARG CUDA_RUNTIME_IMAGE=nvcr.io/nvidia/cuda:13.0.1-cudnn-runtime-ubuntu24.04
 
