@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=immich-machine-learning:v3.0.3-cuda-arm64
+ARG BASE_IMAGE=immich-machine-learning:v3.1.0-cuda-arm64
 
 FROM ${BASE_IMAGE}
 

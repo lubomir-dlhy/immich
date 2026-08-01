@@ -1,8 +1,8 @@
-ARG BASE_IMAGE=registry.lubomirdlhy.sk/immich-server:v3.0.3-pet-review-workflow26
+ARG BASE_IMAGE=ghcr.io/immich-app/immich-server:v3.1.0
 
 FROM ${BASE_IMAGE}
 
-# Reuse the proven v3.0.3 production runtime and native dependencies while
+# Reuse the matching upstream production runtime and native dependencies while
 # replacing only the compiled server and web artifacts from this fork.
 COPY server/dist /usr/src/app/server/dist
 COPY web/build /build/www

@@ -3,12 +3,12 @@ name: immich-ml-gx10
 services:
   immich-machine-learning:
     container_name: immich_machine_learning
-    image: immich-machine-learning:v3.0.3-pet-dfine-cuda-arm64
+    image: immich-machine-learning:v3.1.0-pet1-cuda-arm64
     build:
       context: ..
       dockerfile: docker/Dockerfile.ml-gx10-overlay
       args:
-        BASE_IMAGE: immich-machine-learning:v3.0.3-pet-yoloxx-cuda-arm64
+        BASE_IMAGE: immich-machine-learning:v3.0.3-pet-dfine-cuda-arm64
     ports:
       - 192.168.2.4:3003:3003
     volumes:
