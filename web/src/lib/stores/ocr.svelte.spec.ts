@@ -7,6 +7,7 @@ import { ocrManager, type OcrBoundingBox } from '$lib/stores/ocr.svelte';
 vi.mock('@immich/sdk', () => ({
   getAssetInfo: vi.fn(),
   getAssetOcr: vi.fn(),
+  getAssetPets: vi.fn(),
   getFaces: vi.fn(),
 }));
 

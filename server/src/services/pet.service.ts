@@ -58,7 +58,7 @@ const parseEmbedding = (embedding: string): number[] => {
 
 const cosineDistance = (left: number[], right: number[]): number => {
   if (left.length === 0 || left.length !== right.length) {
-    return Number.POSITIVE_INFINITY;
+    return Infinity;
   }
 
   let dot = 0;
@@ -325,11 +325,10 @@ export class PetService extends BaseService {
       groupedSelectors.set(assetId, trackIds);
     }
 
-    const permission =
-      dto.target.type === 'rejected' || dto.target.type === 'restore' || dto.target.type === 'species'
-        ? Permission.AssetUpdate
-        : Permission.AssetRead;
-    await this.requireAccess({ auth, permission, ids: [...groupedSelectors.keys()] });
+    const permission = ['rejected', 'restore', 'species'].includes(dto.target.type)
+      ? Permission.AssetUpdate
+      : Permission.AssetRead;
+    await this.requireAccess({ auth, permission, ids: groupedSelectors.keys().toArray() });
 
     const assets = [];
     const selectedSightings = [];
@@ -378,11 +377,13 @@ export class PetService extends BaseService {
     for (const { asset, trackIds } of assets) {
       const visiblePets = await this.petRepository.getAssetPets(asset.id, auth.user.id);
       for (const { trackId } of visiblePets) {
-        if (trackIds.has(trackId)) {
-          const petId = visiblePets.find((pet) => pet.trackId === trackId)?.pet?.id;
-          if (petId) {
-            affectedPetIds.add(petId);
-          }
+        if (!trackIds.has(trackId)) {
+          continue;
+        }
+
+        const petId = visiblePets.find((pet) => pet.trackId === trackId)?.pet?.id;
+        if (petId) {
+          affectedPetIds.add(petId);
         }
       }
 
@@ -707,15 +708,16 @@ export class PetService extends BaseService {
         const pets = result.pets.filter(({ score }) => score >= detectionConfig.minScore);
         const detections = force
           ? pets
-          : pets.filter(
-              (detection) =>
-                !asset.pets.some(
-                  (existing) =>
+          : pets.filter((detection) =>
+              asset.pets.every(
+                (existing) =>
+                  !(
                     existing.isRejected &&
                     existing.frameTimestampMs === frameTimestampMs &&
                     existing.species === detection.species &&
-                    getIntersectionOverUnion(existing, detection) >= 0.5,
-                ),
+                    getIntersectionOverUnion(existing, detection) >= 0.5
+                  ),
+              ),
             );
 
         const detectionEmbeddings = detections.map(({ embedding }) => parseEmbedding(embedding));
@@ -737,10 +739,12 @@ export class PetService extends BaseService {
         const matches = new Map<number, PetVideoTrack>();
         const matchedTrackIds = new Set<string>();
         for (const { detectionIndex, track } of candidates) {
-          if (!matches.has(detectionIndex) && !matchedTrackIds.has(track.id)) {
-            matches.set(detectionIndex, track);
-            matchedTrackIds.add(track.id);
+          if (matches.has(detectionIndex) || matchedTrackIds.has(track.id)) {
+            continue;
           }
+
+          matches.set(detectionIndex, track);
+          matchedTrackIds.add(track.id);
         }
 
         for (const [detectionIndex, detection] of detections.entries()) {

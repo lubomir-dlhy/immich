@@ -629,7 +629,7 @@ describe(PetService.name, () => {
     const detectedPet = {
       boundingBox: { x1: 127, y1: 1046, x2: 821, y2: 1355 },
       embedding: '[0.3,0.4]',
-      score: 0.356_776_893,
+      score: 0.356776893,
       species: 'dog',
     };
     mocks.pet.getAssetForDetection.mockResolvedValue({

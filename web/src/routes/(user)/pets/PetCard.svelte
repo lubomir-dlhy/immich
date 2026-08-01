@@ -50,7 +50,8 @@
   };
 
   const changeSpecies = async (event: Event) => {
-    const species = (event.currentTarget as HTMLSelectElement).value as Species;
+    const select = event.currentTarget as HTMLSelectElement;
+    const species = select.value as Species;
     if (savingSpecies || species === pet.species) {
       return;
     }
@@ -60,7 +61,7 @@
       const updatedPet = await updatePet({ id: pet.id, petUpdateDto: { species } });
       onUpdate({ ...pet, ...updatedPet });
     } catch (error) {
-      (event.currentTarget as HTMLSelectElement).value = pet.species;
+      select.value = pet.species;
       handleError(error, $t('failed_to_update_pet'));
     } finally {
       savingSpecies = false;

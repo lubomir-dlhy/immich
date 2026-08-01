@@ -194,11 +194,9 @@ export class AlbumService extends BaseService {
         auth.user.id,
       );
 
-      const allUsersExceptUs = album.albumUsers.map(({ user }) => user.id).filter((userId) => userId !== auth.user.id);
-
-      for (const recipientId of allUsersExceptUs) {
-        await this.eventRepository.emit('AlbumUpdate', { id, recipientId });
-      }
+      const userIds = album.albumUsers.map(({ user }) => user.id);
+      const recipientIds = userIds.filter((userId) => userId !== auth.user.id);
+      await this.eventRepository.emit('AlbumUpdate', { id, userIds, recipientIds });
 
       const addedAssetIds = results.filter(({ success }) => success).map(({ id }) => id);
       await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', assetIds: addedAssetIds });
@@ -230,10 +228,10 @@ export class AlbumService extends BaseService {
     }
 
     const albumAssetValues: { albumId: string; assetId: string }[] = [];
-    const events: { id: string; recipients: string[] }[] = [];
+    const events: { id: string; userIds: string[]; recipientIds: string[] }[] = [];
     for (const albumId of allowedAlbumIds) {
       const existingAssetIds = await this.albumRepository.getAssetIds(albumId, [...allowedAssetIds]);
-      const notPresentAssetIds = [...allowedAssetIds].filter((id) => !existingAssetIds.has(id));
+      const notPresentAssetIds = [...allowedAssetIds.difference(existingAssetIds)];
       if (notPresentAssetIds.length === 0) {
         continue;
       }
@@ -253,8 +251,9 @@ export class AlbumService extends BaseService {
         },
         auth.user.id,
       );
-      const allUsersExceptUs = album.albumUsers.map(({ user }) => user.id).filter((userId) => userId !== auth.user.id);
-      events.push({ id: albumId, recipients: allUsersExceptUs });
+      const userIds = album.albumUsers.map(({ user }) => user.id);
+      const recipientIds = userIds.filter((userId) => userId !== auth.user.id);
+      events.push({ id: albumId, userIds, recipientIds });
     }
 
     await this.albumRepository.addAssetIdsToAlbums(albumAssetValues);
@@ -265,9 +264,7 @@ export class AlbumService extends BaseService {
       });
     }
     for (const event of events) {
-      for (const recipientId of event.recipients) {
-        await this.eventRepository.emit('AlbumUpdate', { id: event.id, recipientId });
-      }
+      await this.eventRepository.emit('AlbumUpdate', event);
     }
 
     return results;
@@ -284,8 +281,16 @@ export class AlbumService extends BaseService {
     );
 
     const removedIds = results.filter(({ success }) => success).map(({ id }) => id);
-    if (removedIds.length > 0 && album.albumThumbnailAssetId && removedIds.includes(album.albumThumbnailAssetId)) {
-      await this.albumRepository.updateThumbnails();
+    if (removedIds.length > 0) {
+      if (album.albumThumbnailAssetId && removedIds.includes(album.albumThumbnailAssetId)) {
+        await this.albumRepository.updateThumbnails();
+      }
+
+      await this.eventRepository.emit('AlbumUpdate', {
+        id,
+        userIds: album.albumUsers.map(({ user }) => user.id),
+        recipientIds: [],
+      });
     }
     if (removedIds.length > 0) {
       await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'revoke' });
@@ -305,7 +310,7 @@ export class AlbumService extends BaseService {
         throw new BadRequestException('Cannot add another owner');
       }
 
-      const exists = album.albumUsers.find(({ user: { id } }) => id === userId);
+      const exists = album.albumUsers.some(({ user: { id } }) => id === userId);
       if (exists) {
         continue;
       }
@@ -324,7 +329,7 @@ export class AlbumService extends BaseService {
       await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', albumId: id });
     }
 
-    return this.findOrFail(id, auth.user.id, { withAssets: true }).then(mapAlbum);
+    return mapAlbum(await this.findOrFail(id, auth.user.id, { withAssets: true }));
   }
 
   async removeUser(auth: AuthDto, id: string, userId: string | 'me'): Promise<void> {

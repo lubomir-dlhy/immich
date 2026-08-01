@@ -151,10 +151,7 @@ describe(PersonRepository.name, () => {
       const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
       await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
 
-      const faces = [];
-      for await (const face of sut.getFacesForSharedRecognition({ albumId: album.id })) {
-        faces.push(face);
-      }
+      const faces = await Array.fromAsync(sut.getFacesForSharedRecognition({ albumId: album.id }));
 
       expect(faces.map(({ id }) => id)).toContain(assetFace.id);
     });

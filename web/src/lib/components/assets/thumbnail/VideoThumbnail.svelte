@@ -91,10 +91,7 @@
         }),
       );
       const remaining = currentTarget.duration - currentTarget.currentTime;
-      remainingSeconds = Math.min(
-        Math.ceil(Number.isNaN(remaining) ? Number.POSITIVE_INFINITY : remaining),
-        durationInSeconds,
-      );
+      remainingSeconds = Math.min(Math.ceil(Number.isNaN(remaining) ? Infinity : remaining), durationInSeconds);
     }}
   ></video>
 {/if}
