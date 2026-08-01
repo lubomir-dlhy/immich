@@ -3,7 +3,7 @@ name: immich-ml-gx10
 services:
   immich-machine-learning:
     container_name: immich_machine_learning
-    image: immich-machine-learning:v3.1.0-pet2-cuda-arm64
+    image: immich-machine-learning:v3.1.0-pet3-cuda-arm64
     build:
       context: ..
       dockerfile: docker/Dockerfile.ml-gx10-overlay

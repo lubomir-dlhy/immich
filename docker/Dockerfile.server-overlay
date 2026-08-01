@@ -6,3 +6,13 @@ FROM ${BASE_IMAGE}
 # replacing only the compiled server and web artifacts from this fork.
 COPY server/dist /usr/src/app/server/dist
 COPY web/build /build/www
+
+# These upstream v3.1 migrations sort before pet migrations that this fork
+# already ran in production. The fork carries them under later timestamps.
+RUN rm -f \
+      /usr/src/app/server/dist/schema/migrations/1784647658615-AddOAuthBearerTokenToSession.d.ts \
+      /usr/src/app/server/dist/schema/migrations/1784647658615-AddOAuthBearerTokenToSession.js \
+      /usr/src/app/server/dist/schema/migrations/1784647658615-AddOAuthBearerTokenToSession.js.map \
+      /usr/src/app/server/dist/schema/migrations/1784836013770-MinFacePreferenceMigration.d.ts \
+      /usr/src/app/server/dist/schema/migrations/1784836013770-MinFacePreferenceMigration.js \
+      /usr/src/app/server/dist/schema/migrations/1784836013770-MinFacePreferenceMigration.js.map
