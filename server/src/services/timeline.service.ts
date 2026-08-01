@@ -45,7 +45,7 @@ export class TimelineService extends BaseService {
     // Fork: when viewing a person's photos, also include shared-album assets so
     // photos of that person uploaded by others appear in their timeline.
     const sharedAlbumWithUserId =
-      forkFeatures.sharedFaceRecognition && dto.personId ? auth.user.id : undefined;
+      forkFeatures.sharedFaceRecognition && (dto.personId || dto.petId) ? auth.user.id : undefined;
 
     return { ...options, userIds, sharedAlbumWithUserId };
   }

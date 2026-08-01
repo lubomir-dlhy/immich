@@ -82,6 +82,12 @@ COPY --from=immich /opt/venv /opt/venv
 COPY --from=immich /usr/src /usr/src
 COPY --from=ort-builder /tmp/ort-wheel /tmp/ort-wheel
 
+# Keep the upstream runtime and compiled CUDA provider, but run the machine
+# learning source from this fork so custom pipelines (including pets) are
+# present in the GX10 image.
+COPY machine-learning/immich_ml /usr/src/immich_ml
+COPY machine-learning/scripts/healthcheck.py /usr/src/healthcheck.py
+
 RUN /opt/venv/bin/python -m ensurepip \
     && /opt/venv/bin/python -m pip uninstall --yes onnxruntime onnxruntime-gpu \
     && /opt/venv/bin/python -m pip install \

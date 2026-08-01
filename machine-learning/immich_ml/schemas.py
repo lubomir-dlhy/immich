@@ -29,6 +29,7 @@ class BoundingBox(TypedDict):
 
 class ModelTask(StrEnum):
     FACIAL_RECOGNITION = "facial-recognition"
+    PET_RECOGNITION = "pet-recognition"
     SEARCH = "clip"
     OCR = "ocr"
 
@@ -47,10 +48,13 @@ class ModelFormat(StrEnum):
 
 
 class ModelSource(StrEnum):
+    ANIMAL_ID = "animal-id"
+    D_FINE = "d-fine"
     INSIGHTFACE = "insightface"
     MCLIP = "mclip"
     OPENCLIP = "openclip"
     PADDLE = "paddle"
+    YOLOX = "yolox"
 
 
 class ModelPrecision(StrEnum):
@@ -99,6 +103,22 @@ class DetectedFace(TypedDict):
 
 
 FacialRecognitionOutput = list[DetectedFace]
+
+
+class PetDetectionOutput(TypedDict):
+    boxes: npt.NDArray[np.float32]
+    scores: npt.NDArray[np.float32]
+    species: list[str]
+
+
+class DetectedPet(TypedDict):
+    boundingBox: BoundingBox
+    embedding: str
+    score: float
+    species: str
+
+
+PetRecognitionOutput = list[DetectedPet]
 
 
 class PipelineEntry(TypedDict):

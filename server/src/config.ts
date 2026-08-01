@@ -97,6 +97,14 @@ export type SystemConfig = {
       minFaces: number;
       maxDistance: number;
     };
+    petRecognition: {
+      enabled: boolean;
+      detectionModelName: string;
+      recognitionModelName: string;
+      minScore: number;
+      minPets: number;
+      maxDistance: number;
+    };
     ocr: {
       enabled: boolean;
       modelName: string;
@@ -313,6 +321,14 @@ export const defaults = Object.freeze<SystemConfig>({
       minScore: 0.7,
       maxDistance: 0.5,
       minFaces: 3,
+    },
+    petRecognition: {
+      enabled: true,
+      detectionModelName: 'dfine_l_coco',
+      recognitionModelName: 'AnimalID-CLIP-ViT-B-32',
+      minScore: 0.65,
+      maxDistance: 0.2,
+      minPets: 3,
     },
     ocr: {
       enabled: true,

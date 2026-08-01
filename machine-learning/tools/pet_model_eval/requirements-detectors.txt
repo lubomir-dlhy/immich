@@ -1,0 +1,7 @@
+# Pin the compatible 1.4 line. RF-DETR 1.6+ requires Transformers 5 and would
+# replace the validated identity-evaluation environment.
+rfdetr==1.4.1
+ultralytics>=8.3,<9
+opencv-python<4.13
+numpy>=1.26,<2
+transformers>=4.57,<5

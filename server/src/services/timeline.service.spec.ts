@@ -41,6 +41,18 @@ describe(TimelineService.name, () => {
         bbox: { west: -70, south: -30, east: 120, north: 55 },
       });
     });
+
+    it('should build a pet timeline that includes accessible shared-album assets', async () => {
+      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: 'bucket', count: 1 }]);
+
+      await sut.getTimeBuckets(authStub.admin, { petId: 'pet-id' });
+
+      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith({
+        petId: 'pet-id',
+        sharedAlbumWithUserId: authStub.admin.user.id,
+        userIds: [authStub.admin.user.id],
+      });
+    });
   });
 
   describe('getTimeBucket', () => {

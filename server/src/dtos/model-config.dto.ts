@@ -38,6 +38,24 @@ export const FacialRecognitionConfigSchema = ModelConfigSchema.extend({
   minFaces: z.int().min(1).describe('Minimum number of faces required for recognition'),
 }).meta({ id: 'FacialRecognitionConfig' });
 
+export const PetRecognitionConfigSchema = TaskConfigSchema.extend({
+  detectionModelName: z.string().describe('Name of the pet detection model to use'),
+  recognitionModelName: z.string().describe('Name of the pet embedding model to use'),
+  minScore: z
+    .number()
+    .meta({ format: 'double' })
+    .min(0.1)
+    .max(1)
+    .describe('Minimum confidence score for pet detection'),
+  maxDistance: z
+    .number()
+    .meta({ format: 'double' })
+    .min(0.01)
+    .max(2)
+    .describe('Maximum cosine distance threshold for pet recognition'),
+  minPets: z.int().min(1).describe('Minimum number of matching sightings required to create a pet'),
+}).meta({ id: 'PetRecognitionConfig' });
+
 export const OcrConfigSchema = ModelConfigSchema.extend({
   maxResolution: z.int().min(1).describe('Maximum resolution for OCR processing'),
   minDetectionScore: z

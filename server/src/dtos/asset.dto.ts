@@ -65,6 +65,7 @@ export const AssetIdsSchema = z
 
 export enum AssetJobName {
   REFRESH_FACES = 'refresh-faces',
+  REFRESH_PETS = 'refresh-pets',
   REFRESH_METADATA = 'refresh-metadata',
   REGENERATE_THUMBNAIL = 'regenerate-thumbnail',
   TRANSCODE_VIDEO = 'transcode-video',

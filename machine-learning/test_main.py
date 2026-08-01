@@ -20,6 +20,7 @@ from pytest_mock import MockerFixture
 
 from immich_ml.config import MaxBatchSize, Settings, settings
 from immich_ml.main import load, preload_models
+from immich_ml.models import get_model_class
 from immich_ml.models.base import InferenceModel
 from immich_ml.models.cache import ModelCache
 from immich_ml.models.clip.textual import MClipTextualEncoder, OpenClipTextualEncoder
@@ -29,6 +30,7 @@ from immich_ml.models.facial_recognition.recognition import FaceRecognizer
 from immich_ml.models.ocr.detection import TextDetector
 from immich_ml.models.ocr.recognition import TextRecognizer
 from immich_ml.models.ocr.schemas import OcrOptions
+from immich_ml.models.pet_recognition.detection import PetDetector
 from immich_ml.schemas import ModelFormat, ModelPrecision, ModelTask, ModelType
 from immich_ml.sessions.ann import AnnSession
 from immich_ml.sessions.ort import OrtSession
@@ -1018,6 +1020,95 @@ class TestFaceRecognition:
         assert recognizer.batch_size is None
 
 
+class TestPetRecognition:
+    @pytest.mark.parametrize("model_name", ["yolox_s", "yolox_m", "yolox_x"])
+    def test_supports_yolox_detector_sizes(self, model_name: str) -> None:
+        assert get_model_class(model_name, ModelType.DETECTION, ModelTask.PET_RECOGNITION) is PetDetector
+
+    def test_supports_dfine_detector(self) -> None:
+        assert get_model_class("dfine_l_coco", ModelType.DETECTION, ModelTask.PET_RECOGNITION) is PetDetector
+
+    def test_manual_detection_scales_the_selected_region_without_running_yolo(self) -> None:
+        session = mock.Mock()
+        detector = PetDetector("yolox_s", min_score=0.25, cache_dir="test_cache", session=session)
+
+        result = detector.predict(
+            np.full((200, 400, 3), 255, dtype=np.uint8),
+            manualBox={"imageWidth": 1000, "imageHeight": 500, "x": 100, "y": 50, "width": 300, "height": 200},
+            manualSpecies="dog",
+        )
+
+        assert result["species"] == ["dog"]
+        assert np.array_equal(result["scores"], [1.0])
+        assert np.array_equal(result["boxes"], [[40, 20, 160, 100]])
+        session.run.assert_not_called()
+
+    def test_detection_filters_to_cats_and_dogs(self) -> None:
+        session = mock.Mock()
+        session.get_inputs.return_value = [SimpleNamespace(name="images")]
+        predictions = np.zeros((8400, 85), dtype=np.float32)
+        predictions[0, :4] = [20, 20, np.log(20), np.log(20)]
+        predictions[0, 4] = 0.9
+        predictions[0, 5 + 16] = 0.95
+        session.run.return_value = [predictions[None, ...]]
+        detector = PetDetector("yolox_s", min_score=0.25, cache_dir="test_cache", session=session)
+
+        result = detector.predict(np.full((640, 640, 3), 255, dtype=np.uint8))
+
+        assert result["species"] == ["dog"]
+        assert np.allclose(result["scores"], [0.855])
+        assert np.array_equal(result["boxes"], [[80, 80, 240, 240]])
+
+    def test_detection_suppresses_overlapping_cat_and_dog_predictions(self) -> None:
+        session = mock.Mock()
+        session.get_inputs.return_value = [SimpleNamespace(name="images")]
+        predictions = np.zeros((8400, 85), dtype=np.float32)
+        predictions[0, :4] = [20, 20, np.log(20), np.log(20)]
+        predictions[0, 4] = 0.9
+        predictions[0, 5 + 16] = 0.95
+        predictions[1, :4] = [19, 20, np.log(20), np.log(20)]
+        predictions[1, 4] = 0.85
+        predictions[1, 5 + 15] = 0.9
+        session.run.return_value = [predictions[None, ...]]
+        detector = PetDetector("yolox_s", min_score=0.25, cache_dir="test_cache", session=session)
+
+        result = detector.predict(np.full((640, 640, 3), 255, dtype=np.uint8))
+
+        assert result["species"] == ["dog"]
+        assert np.allclose(result["scores"], [0.855])
+        assert np.array_equal(result["boxes"], [[80, 80, 240, 240]])
+
+    def test_dfine_detection_filters_and_scales_cats_and_dogs(self) -> None:
+        session = mock.Mock()
+        session.get_inputs.return_value = [SimpleNamespace(name="pixel_values")]
+        session.get_outputs.return_value = [SimpleNamespace(name="logits"), SimpleNamespace(name="pred_boxes")]
+        logits = np.full((3, 80), -10, dtype=np.float32)
+        logits[0, 16] = np.log(9)
+        logits[1, 14] = np.log(19)
+        boxes = np.asarray(
+            [
+                [0.5, 0.5, 0.5, 0.5],
+                [0.25, 0.25, 0.2, 0.2],
+                [0.5, 0.5, 0.1, 0.1],
+            ],
+            dtype=np.float32,
+        )
+        session.run.return_value = [logits[None, ...], boxes[None, ...]]
+        detector = PetDetector("dfine_l_coco", min_score=0.65, cache_dir="test_cache", session=session)
+
+        image = np.zeros((200, 400, 3), dtype=np.uint8)
+        image[..., 2] = 255
+        result = detector.predict(image)
+
+        assert result["species"] == ["dog"]
+        assert np.allclose(result["scores"], [0.9])
+        assert np.array_equal(result["boxes"], [[100, 50, 300, 150]])
+        tensor = session.run.call_args.args[1]["pixel_values"]
+        assert tensor.shape == (1, 3, 640, 640)
+        assert np.allclose(tensor[:, 0], 1.0)
+        assert np.allclose(tensor[:, 1:], 0.0)
+
+
 class TestOcr:
     def test_set_det_min_score(self, path: mock.Mock) -> None:
         path.return_value.__truediv__.return_value.__truediv__.return_value.suffix = ".onnx"
@@ -1045,10 +1136,10 @@ class TestOcr:
 
         rapid_recognizer.assert_called_once_with(
             OcrOptions(
-              session=ort_session.return_value,
-              rec_batch_num=6,
-              rec_img_shape=(3, 48, 320),
-              model_root_dir=text_recognizer.cache_dir,
+                session=ort_session.return_value,
+                rec_batch_num=6,
+                rec_img_shape=(3, 48, 320),
+                model_root_dir=text_recognizer.cache_dir,
             )
         )
 
@@ -1063,10 +1154,10 @@ class TestOcr:
 
         rapid_recognizer.assert_called_once_with(
             OcrOptions(
-              session=ort_session.return_value,
-              rec_batch_num=4,
-              rec_img_shape=(3, 48, 320),
-              model_root_dir=text_recognizer.cache_dir,
+                session=ort_session.return_value,
+                rec_batch_num=4,
+                rec_img_shape=(3, 48, 320),
+                model_root_dir=text_recognizer.cache_dir,
             )
         )
 
@@ -1083,10 +1174,10 @@ class TestOcr:
 
         rapid_recognizer.assert_called_once_with(
             OcrOptions(
-              session=ort_session.return_value,
-              rec_batch_num=6,
-              rec_img_shape=(3, 48, 320),
-              model_root_dir=text_recognizer.cache_dir,
+                session=ort_session.return_value,
+                rec_batch_num=6,
+                rec_img_shape=(3, 48, 320),
+                model_root_dir=text_recognizer.cache_dir,
             )
         )
 

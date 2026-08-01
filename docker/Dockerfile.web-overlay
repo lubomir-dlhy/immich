@@ -1,0 +1,6 @@
+ARG BASE_IMAGE=registry.lubomirdlhy.sk/immich-server:v3.0.3-pet-review-workflow4
+
+FROM ${BASE_IMAGE}
+
+# Keep the deployed custom server intact and replace only the compiled web app.
+COPY web/build /build/www

@@ -1,0 +1,8 @@
+ARG BASE_IMAGE=immich-machine-learning:v3.0.3-cuda-arm64
+
+FROM ${BASE_IMAGE}
+
+# Reuse the already-built GX10 CUDA/ONNX Runtime image and overlay only the
+# machine-learning application from this fork.
+COPY machine-learning/immich_ml /usr/src/immich_ml
+COPY machine-learning/scripts/healthcheck.py /usr/src/healthcheck.py

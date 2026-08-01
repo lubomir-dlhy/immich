@@ -25,7 +25,7 @@
   } from '@immich/sdk';
   import { Icon, IconButton, Link, LoadingSpinner, Text } from '@immich/ui';
   import { mdiCamera, mdiCameraIris, mdiClose, mdiImageOutline, mdiInformationOutline } from '@mdi/js';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { t } from 'svelte-i18n';
   import { slide } from 'svelte/transition';
   import PersonSidePanel from '../faces-page/PersonSidePanel.svelte';
@@ -33,6 +33,7 @@
   import UserAvatar from '../shared-components/UserAvatar.svelte';
   import AlbumListItemDetails from './AlbumListItemDetails.svelte';
   import DetailPanelPeople from '$lib/components/asset-viewer/DetailPanelPeople.svelte';
+  import DetailPanelPets from '$lib/components/asset-viewer/DetailPanelPets.svelte';
   import { faceManager } from '$lib/stores/face.svelte';
 
   interface Props {
@@ -55,21 +56,35 @@
   );
   let previousId: string | undefined = $state();
   let previousRoute = $derived(currentAlbum?.id ? Route.viewAlbum(currentAlbum) : Route.photos());
+  let albums = $state.raw<AlbumResponseDto[]>([]);
+  let albumRequestId = 0;
+  const mapComponent = import('$lib/components/shared-components/map/Map.svelte');
+  const mapLoadingDelay = delay(timeToLoadTheMap);
 
-  const refreshAlbums = async () => {
+  const refreshAlbums = async (assetId = asset.id) => {
+    const requestId = ++albumRequestId;
     if (authManager.isSharedLink) {
-      return [];
+      albums = [];
+      return;
     }
 
     try {
-      return await getAllAlbums({ assetId: asset.id });
+      const result = await getAllAlbums({ assetId });
+      if (requestId === albumRequestId) {
+        albums = result;
+      }
     } catch (error) {
       handleError(error, 'Error getting asset album membership');
-      return [];
+      if (requestId === albumRequestId) {
+        albums = [];
+      }
     }
   };
 
-  let albums = $derived(refreshAlbums());
+  $effect(() => {
+    const assetId = asset.id;
+    untrack(() => void refreshAlbums(assetId));
+  });
 
   $effect(() => {
     if (!previousId) {
@@ -112,7 +127,7 @@
   });
 </script>
 
-<OnEvents onAlbumAddAssets={() => (albums = refreshAlbums())} />
+<OnEvents onAlbumAddAssets={() => void refreshAlbums()} />
 
 {#if !assetViewerManager.isEditFacesPanelOpen}
   <section class="relative p-2">
@@ -153,6 +168,7 @@
     <DetailPanelDescription {asset} {isOwner} />
     <DetailPanelRating {asset} {isOwner} />
     <DetailPanelPeople {asset} {isOwner} {previousRoute} />
+    <DetailPanelPets {asset} {isOwner} />
 
     <div class="p-4">
       {#if asset.exifInfo}
@@ -280,8 +296,8 @@
 
   {#if latlng && featureFlagsManager.value.map}
     <div class="h-90">
-      {#await import('$lib/components/shared-components/map/Map.svelte')}
-        {#await delay(timeToLoadTheMap) then}
+      {#await mapComponent}
+        {#await mapLoadingDelay then}
           <!-- show the loading spinner only if loading the map takes too much time -->
           <div class="flex size-full items-center justify-center">
             <LoadingSpinner />
@@ -341,39 +357,37 @@
     </section>
   {/if}
 
-  {#await albums then albums}
-    {#if albums.length > 0}
-      <section class="p-6 dark:text-immich-dark-fg">
-        <div class="pb-4">
-          <Text size="small" color="muted">{$t('appears_in')}</Text>
-        </div>
-        {#each albums as album (album.id)}
-          <a href={Route.viewAlbum(album)}>
-            <div class="flex items-center gap-4 pt-2 hover:cursor-pointer">
-              <div>
-                <img
-                  alt={album.albumName}
-                  class="size-12.5 rounded-sm object-cover"
-                  src={album.albumThumbnailAssetId &&
-                    getAssetMediaUrl({ id: album.albumThumbnailAssetId, size: AssetMediaSize.Preview })}
-                  draggable="false"
-                />
-              </div>
+  {#if albums.length > 0}
+    <section class="p-6 dark:text-immich-dark-fg">
+      <div class="pb-4">
+        <Text size="small" color="muted">{$t('appears_in')}</Text>
+      </div>
+      {#each albums as album (album.id)}
+        <a href={Route.viewAlbum(album)}>
+          <div class="flex items-center gap-4 pt-2 hover:cursor-pointer">
+            <div>
+              <img
+                alt={album.albumName}
+                class="size-12.5 rounded-sm object-cover"
+                src={album.albumThumbnailAssetId &&
+                  getAssetMediaUrl({ id: album.albumThumbnailAssetId, size: AssetMediaSize.Preview })}
+                draggable="false"
+              />
+            </div>
 
-              <div class="my-auto">
-                <p class="dark:text-immich-dark-primary">{album.albumName}</p>
-                <div class="flex flex-col gap-0 text-sm">
-                  <div>
-                    <AlbumListItemDetails {album} />
-                  </div>
+            <div class="my-auto">
+              <p class="dark:text-immich-dark-primary">{album.albumName}</p>
+              <div class="flex flex-col gap-0 text-sm">
+                <div>
+                  <AlbumListItemDetails {album} />
                 </div>
               </div>
             </div>
-          </a>
-        {/each}
-      </section>
-    {/if}
-  {/await}
+          </div>
+        </a>
+      {/each}
+    </section>
+  {/if}
 
   {#if authManager.authenticated && authManager.preferences.tags.enabled}
     <section class="relative px-2 pb-12 dark:bg-immich-dark-bg dark:text-immich-dark-fg">

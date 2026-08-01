@@ -10,7 +10,7 @@
   import { getAssetInfo, AssetMediaSize, type SearchExploreResponseDto } from '@immich/sdk';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { Icon } from '@immich/ui';
-  import { mdiHeart } from '@mdi/js';
+  import { mdiHeart, mdiPaw } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
   import { toTimelineAsset } from '$lib/utils/timeline-util';
@@ -33,6 +33,7 @@
     getFieldItems(data.items, 'createdAt').sort((a, b) => new Date(b.value).getTime() - new Date(a.value).getTime()),
   );
   let people = $state(data.response.people);
+  let pets = $state(data.pets);
 
   let hasPeople = $derived(data.response.total > 0);
 
@@ -84,6 +85,56 @@
                 </div>
               {/if}
               <p class="mt-2 text-sm font-medium text-ellipsis dark:text-white">{person.name}</p>
+            </a>
+          {/each}
+        {/snippet}
+      </SingleGridRow>
+    </div>
+  {/if}
+
+  {#if pets.length > 0}
+    <div class="mt-2 mb-6">
+      <div class="flex justify-between">
+        <p class="mb-4 font-medium dark:text-immich-dark-fg">{$t('pets')}</p>
+        <a
+          href={Route.pets()}
+          class="pe-4 text-sm font-medium hover:text-immich-primary dark:text-immich-dark-fg dark:hover:text-immich-dark-primary"
+          draggable="false">{$t('view_all')}</a
+        >
+      </div>
+      <SingleGridRow class="grid grid-flow-col grid-auto-fill-20 gap-x-4 md:grid-auto-fill-28">
+        {#snippet children({ itemCount })}
+          {#each pets.slice(0, itemCount) as pet (pet.id)}
+            <a href={Route.search({ petIds: [pet.id] })} class="relative text-center">
+              <div
+                class="aspect-square overflow-hidden rounded-full bg-gray-100 shadow-md ring-1 ring-black/5 dark:bg-gray-800"
+              >
+                {#if pet.featureAssetId && pet.imageWidth && pet.imageHeight && pet.boundingBoxX1 !== undefined && pet.boundingBoxY1 !== undefined && pet.boundingBoxX2 !== undefined && pet.boundingBoxY2 !== undefined}
+                  <svg
+                    class="size-full"
+                    viewBox={`${pet.boundingBoxX1} ${pet.boundingBoxY1} ${Math.max(1, pet.boundingBoxX2 - pet.boundingBoxX1)} ${Math.max(1, pet.boundingBoxY2 - pet.boundingBoxY1)}`}
+                    role="img"
+                    aria-label={pet.name || $t('unrecognized_pet')}
+                  >
+                    <image
+                      href={getAssetMediaUrl({ id: pet.featureAssetId, size: AssetMediaSize.Preview })}
+                      width={pet.imageWidth}
+                      height={pet.imageHeight}
+                      preserveAspectRatio="xMidYMid slice"
+                    />
+                  </svg>
+                {:else}
+                  <div class="flex size-full items-center justify-center">
+                    <Icon icon={mdiPaw} size="40" class="text-gray-400" />
+                  </div>
+                {/if}
+              </div>
+              <p class="mt-2 truncate text-sm font-medium dark:text-white">
+                {pet.name || $t('unrecognized_pet')}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {$t('items_count', { values: { count: pet.assetCount ?? 0 } })}
+              </p>
             </a>
           {/each}
         {/snippet}

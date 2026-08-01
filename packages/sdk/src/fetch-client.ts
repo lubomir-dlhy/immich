@@ -1522,6 +1522,136 @@ export type PersonStatisticsResponseDto = {
     /** Number of assets */
     assets: number;
 };
+export type PetResponseDto = {
+    assetCount?: number;
+    boundingBoxX1?: number;
+    boundingBoxX2?: number;
+    boundingBoxY1?: number;
+    boundingBoxY2?: number;
+    featureAssetId?: string | null;
+    featureFrameTimestampMs?: number;
+    featureIsVideo?: boolean;
+    featurePetAssetId: string | null;
+    id: string;
+    imageHeight?: number;
+    imageWidth?: number;
+    isHidden: boolean;
+    name: string;
+    species: string;
+};
+export type AssetPetCreateDto = {
+    assetId: string;
+    frameDurationMs?: number;
+    frameTimestampMs?: number;
+    height: number;
+    imageHeight: number;
+    imageWidth: number;
+    petId?: string;
+    species: Species;
+    width: number;
+    x: number;
+    y: number;
+};
+export type AssetPetResponseDto = {
+    assetId: string;
+    boundingBoxX1: number;
+    boundingBoxX2: number;
+    boundingBoxY1: number;
+    boundingBoxY2: number;
+    detectionScore: number;
+    frameDurationMs: number | null;
+    frameTimestampMs: number;
+    id: string;
+    imageHeight: number;
+    imageWidth: number;
+    pet: (PetResponseDto) | null;
+    species: string;
+    trackId: string;
+};
+export type PetSuggestionDto = {
+    distance: number;
+    pet: PetResponseDto;
+};
+export type PetTrackAssignmentDto = {
+    selectors: {
+        assetId: string;
+        trackId: string;
+    }[];
+    target: {
+        "type": "existing";
+        petId: string;
+    } | {
+        "type": "new";
+        species: Species;
+        name?: string;
+    } | {
+        "type": "unassigned";
+    } | {
+        "type": "rejected";
+    } | {
+        "type": "restore";
+    } | {
+        "type": "species";
+        species: Species;
+    };
+};
+export type PetClusterNeighborDto = {
+    distance: number;
+    petId: string;
+};
+export type PetClusterPointDto = {
+    assetCount?: number;
+    boundingBoxX1?: number;
+    boundingBoxX2?: number;
+    boundingBoxY1?: number;
+    boundingBoxY2?: number;
+    featureAssetId?: string | null;
+    featureFrameTimestampMs?: number;
+    featureIsVideo?: boolean;
+    featurePetAssetId: string | null;
+    id: string;
+    imageHeight?: number;
+    imageWidth?: number;
+    isHidden: boolean;
+    name: string;
+    nearestDistance: number | null;
+    nearestPetId: string | null;
+    neighbors: PetClusterNeighborDto[];
+    species: string;
+    x: number;
+    y: number;
+};
+export type PetClusterResponseDto = {
+    points: PetClusterPointDto[];
+    recognitionThreshold: number;
+};
+export type PetRecognitionRunDto = {
+    force?: boolean;
+    /** Rebuild pet identities from existing embeddings while preserving named pet anchors */
+    recluster?: boolean;
+};
+export type PetUpdateDto = {
+    isHidden?: boolean;
+    name?: string;
+    species?: Species;
+};
+export type PetMergeDto = {
+    /** Pet IDs to merge into the selected pet */
+    ids: string[];
+};
+export type PetReassignDto = {
+    /** Assets whose pet sightings should be moved */
+    assetIds: string[];
+    /** Existing destination pet; omit to create a new pet */
+    targetPetId?: string;
+};
+export type PetRejectAppearancesDto = {
+    /** Assets whose matching pet appearances should be rejected */
+    assetIds: string[];
+};
+export type PetRejectAppearancesResponseDto = {
+    rejected: number;
+};
 export type PluginMethodResponseDto = {
     /** Description */
     description: string;
@@ -1666,6 +1796,8 @@ export type MetadataSearchDto = {
     page?: number;
     /** Filter by person IDs */
     personIds?: string[];
+    /** Filter by pet IDs */
+    petIds?: string[];
     /** Filter by preview file path */
     previewPath?: string;
     /** Filter by rating [1-5], or null for unrated */
@@ -1779,6 +1911,8 @@ export type RandomSearchDto = {
     ocr?: string;
     /** Filter by person IDs */
     personIds?: string[];
+    /** Filter by pet IDs */
+    petIds?: string[];
     /** Filter by rating [1-5], or null for unrated */
     rating?: number | null;
     /** Number of results to return */
@@ -1847,6 +1981,8 @@ export type SmartSearchDto = {
     page?: number;
     /** Filter by person IDs */
     personIds?: string[];
+    /** Filter by pet IDs */
+    petIds?: string[];
     /** Natural language search query */
     query?: string;
     /** Asset ID to use as search reference */
@@ -1913,6 +2049,8 @@ export type StatisticsSearchDto = {
     ocr?: string;
     /** Filter by person IDs */
     personIds?: string[];
+    /** Filter by pet IDs */
+    petIds?: string[];
     /** Filter by rating [1-5], or null for unrated */
     rating?: number | null;
     /** Filter by state/province name */
@@ -2475,6 +2613,20 @@ export type OcrConfig = {
     /** Name of the model to use */
     modelName: string;
 };
+export type PetRecognitionConfig = {
+    /** Name of the pet detection model to use */
+    detectionModelName: string;
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Maximum cosine distance threshold for pet recognition */
+    maxDistance: number;
+    /** Minimum number of matching sightings required to create a pet */
+    minPets: number;
+    /** Minimum confidence score for pet detection */
+    minScore: number;
+    /** Name of the pet embedding model to use */
+    recognitionModelName: string;
+};
 export type SystemConfigMachineLearningDto = {
     availabilityChecks: MachineLearningAvailabilityChecksDto;
     clip: ClipConfig;
@@ -2483,6 +2635,7 @@ export type SystemConfigMachineLearningDto = {
     enabled: boolean;
     facialRecognition: FacialRecognitionConfig;
     ocr: OcrConfig;
+    petRecognition: PetRecognitionConfig;
     /** ML service URLs */
     urls: string[];
 };
@@ -5515,6 +5668,211 @@ export function getPersonThumbnail({ id }: {
     }));
 }
 /**
+ * Get all pets
+ */
+export function getPets(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PetResponseDto[];
+    }>("/pets", {
+        ...opts
+    }));
+}
+/**
+ * Create a pet sighting
+ */
+export function createAssetPet({ assetPetCreateDto }: {
+    assetPetCreateDto: AssetPetCreateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AssetPetResponseDto;
+    }>("/pets/assets", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: assetPetCreateDto
+    })));
+}
+/**
+ * Get pets in an asset
+ */
+export function getAssetPets({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AssetPetResponseDto[];
+    }>(`/pets/assets/${encodeURIComponent(id)}`, {
+        ...opts
+    }));
+}
+/**
+ * Remove a pet sighting assignment
+ */
+export function unassignAssetPet({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/pets/assets/${encodeURIComponent(id)}/identity`, {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Get a pet sighting thumbnail
+ */
+export function getPetSightingThumbnail({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/pets/assets/${encodeURIComponent(id)}/thumbnail`, {
+        ...opts
+    }));
+}
+/**
+ * Get pet suggestions for a video track
+ */
+export function getTrackSuggestions({ id, trackId }: {
+    id: string;
+    trackId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PetSuggestionDto[];
+    }>(`/pets/assets/${encodeURIComponent(id)}/tracks/${encodeURIComponent(trackId)}/suggestions`, {
+        ...opts
+    }));
+}
+/**
+ * Assign pet video tracks
+ */
+export function assignTracks({ petTrackAssignmentDto }: {
+    petTrackAssignmentDto: PetTrackAssignmentDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AssetPetResponseDto[];
+    }>("/pets/assignments", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: petTrackAssignmentDto
+    })));
+}
+/**
+ * Get the pet similarity map
+ */
+export function getPetClusters(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PetClusterResponseDto;
+    }>("/pets/clusters", {
+        ...opts
+    }));
+}
+/**
+ * Run pet recognition
+ */
+export function runPetRecognition({ petRecognitionRunDto }: {
+    petRecognitionRunDto: PetRecognitionRunDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/pets/recognition", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: petRecognitionRunDto
+    })));
+}
+/**
+ * Get a pet
+ */
+export function getPet({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PetResponseDto;
+    }>(`/pets/${encodeURIComponent(id)}`, {
+        ...opts
+    }));
+}
+/**
+ * Update a pet
+ */
+export function updatePet({ id, petUpdateDto }: {
+    id: string;
+    petUpdateDto: PetUpdateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PetResponseDto;
+    }>(`/pets/${encodeURIComponent(id)}`, oazapfts.json({
+        ...opts,
+        method: "PATCH",
+        body: petUpdateDto
+    })));
+}
+/**
+ * Merge pets
+ */
+export function mergePets({ id, petMergeDto }: {
+    id: string;
+    petMergeDto: PetMergeDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PetResponseDto;
+    }>(`/pets/${encodeURIComponent(id)}/merge`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: petMergeDto
+    })));
+}
+/**
+ * Reassign pet sightings
+ */
+export function reassignPetSightings({ id, petReassignDto }: {
+    id: string;
+    petReassignDto: PetReassignDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PetResponseDto;
+    }>(`/pets/${encodeURIComponent(id)}/reassign`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: petReassignDto
+    })));
+}
+/**
+ * Reject pet appearances
+ */
+export function rejectPetAppearances({ id, petRejectAppearancesDto }: {
+    id: string;
+    petRejectAppearancesDto: PetRejectAppearancesDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PetRejectAppearancesResponseDto;
+    }>(`/pets/${encodeURIComponent(id)}/reject-appearances`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: petRejectAppearancesDto
+    })));
+}
+/**
+ * Get a pet thumbnail
+ */
+export function getPetThumbnail({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/pets/${encodeURIComponent(id)}/thumbnail`, {
+        ...opts
+    }));
+}
+/**
  * List all plugins
  */
 export function searchPlugins({ description, enabled, id, name, title, version }: {
@@ -5688,7 +6046,7 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, petIds, rating, size, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
@@ -5706,6 +6064,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     model?: string | null;
     ocr?: string;
     personIds?: string[];
+    petIds?: string[];
     rating?: number | null;
     size?: number;
     state?: string | null;
@@ -5742,6 +6101,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         model,
         ocr,
         personIds,
+        petIds,
         rating,
         size,
         state,
@@ -6622,7 +6982,7 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, slug, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, petId, slug, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
     isFavorite?: boolean;
@@ -6631,6 +6991,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
     order?: AssetOrder;
     orderBy?: AssetOrderBy;
     personId?: string;
+    petId?: string;
     slug?: string;
     tagId?: string;
     timeBucket: string;
@@ -6652,6 +7013,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
         order,
         orderBy,
         personId,
+        petId,
         slug,
         tagId,
         timeBucket,
@@ -6667,7 +7029,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, slug, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, petId, slug, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
     isFavorite?: boolean;
@@ -6676,6 +7038,7 @@ export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, orde
     order?: AssetOrder;
     orderBy?: AssetOrderBy;
     personId?: string;
+    petId?: string;
     slug?: string;
     tagId?: string;
     userId?: string;
@@ -6696,6 +7059,7 @@ export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, orde
         order,
         orderBy,
         personId,
+        petId,
         slug,
         tagId,
         userId,
@@ -7331,6 +7695,7 @@ export enum AssetRejectReason {
 }
 export enum AssetJobName {
     RefreshFaces = "refresh-faces",
+    RefreshPets = "refresh-pets",
     RefreshMetadata = "refresh-metadata",
     RegenerateThumbnail = "regenerate-thumbnail",
     TranscodeVideo = "transcode-video"
@@ -7418,6 +7783,28 @@ export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
 }
+export enum Species {
+    Cat = "cat",
+    Dog = "dog"
+}
+export enum Type {
+    Existing = "existing"
+}
+export enum Type2 {
+    New = "new"
+}
+export enum Type3 {
+    Unassigned = "unassigned"
+}
+export enum Type4 {
+    Rejected = "rejected"
+}
+export enum Type5 {
+    Restore = "restore"
+}
+export enum Type6 {
+    Species = "species"
+}
 export enum WorkflowType {
     AssetV1 = "AssetV1"
 }
@@ -7438,6 +7825,8 @@ export enum JobName {
     AssetDeleteCheck = "AssetDeleteCheck",
     AssetDetectFacesQueueAll = "AssetDetectFacesQueueAll",
     AssetDetectFaces = "AssetDetectFaces",
+    AssetDetectPetsQueueAll = "AssetDetectPetsQueueAll",
+    AssetDetectPets = "AssetDetectPets",
     AssetDetectDuplicatesQueueAll = "AssetDetectDuplicatesQueueAll",
     AssetDetectDuplicates = "AssetDetectDuplicates",
     AssetEditThumbnailGeneration = "AssetEditThumbnailGeneration",
@@ -7453,6 +7842,8 @@ export enum JobName {
     DatabaseBackup = "DatabaseBackup",
     FacialRecognitionQueueAll = "FacialRecognitionQueueAll",
     FacialRecognition = "FacialRecognition",
+    PetRecognitionQueueAll = "PetRecognitionQueueAll",
+    PetRecognition = "PetRecognition",
     FileDelete = "FileDelete",
     FileMigrationQueueAll = "FileMigrationQueueAll",
     LibraryDeleteCheck = "LibraryDeleteCheck",

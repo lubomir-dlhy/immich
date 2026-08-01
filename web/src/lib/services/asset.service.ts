@@ -30,6 +30,7 @@ import {
   mdiMagnifyPlusOutline,
   mdiMotionPauseOutline,
   mdiMotionPlayOutline,
+  mdiPawOutline,
   mdiPlus,
   mdiPresentationPlay,
   mdiShareVariantOutline,
@@ -50,6 +51,7 @@ import ProfileImageCropperModal from '$lib/modals/ProfileImageCropperModal.svelt
 import SharedLinkCreateModal from '$lib/modals/SharedLinkCreateModal.svelte';
 import { Route } from '$lib/route';
 import { SlideshowState, slideshowStore } from '$lib/stores/slideshow.store';
+import { waitForWebsocketEvent } from '$lib/stores/websocket';
 import { getAssetMediaUrl, getSharedLink, sleep } from '$lib/utils';
 import { downloadUrl } from '$lib/utils';
 import { handleError } from '$lib/utils/handle-error';
@@ -77,6 +79,12 @@ export const getAssetBulkActions = ($t: MessageFormatter) => {
     onAction: () => onAction(AssetJobName.RefreshFaces),
   };
 
+  const RefreshPetsJob: ActionItem = {
+    title: $t('refresh_pets'),
+    icon: mdiPawOutline,
+    onAction: () => onAction(AssetJobName.RefreshPets),
+  };
+
   const RefreshMetadataJob: ActionItem = {
     title: $t('refresh_metadata'),
     icon: mdiDatabaseRefreshOutline,
@@ -96,7 +104,14 @@ export const getAssetBulkActions = ($t: MessageFormatter) => {
     $if: () => ownedAssets.every((asset) => asset.isVideo),
   };
 
-  return { AddToAlbum, RefreshFacesJob, RefreshMetadataJob, RegenerateThumbnailJob, TranscodeVideoJob };
+  return {
+    AddToAlbum,
+    RefreshFacesJob,
+    RefreshPetsJob,
+    RefreshMetadataJob,
+    RegenerateThumbnailJob,
+    TranscodeVideoJob,
+  };
 };
 
 export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto & { stackPrimaryAssetId?: string }) => {
@@ -278,6 +293,12 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto & 
     onAction: () => handleRunAssetJob({ name: AssetJobName.RefreshFaces, assetIds: [asset.id] }),
   };
 
+  const RefreshPetsJob: ActionItem = {
+    title: $t('refresh_pets'),
+    icon: mdiPawOutline,
+    onAction: () => handleRunAssetJob({ name: AssetJobName.RefreshPets, assetIds: [asset.id] }),
+  };
+
   const RefreshMetadataJob: ActionItem = {
     title: $t('refresh_metadata'),
     icon: mdiDatabaseRefreshOutline,
@@ -320,6 +341,7 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto & 
     ViewInTimeline,
     ViewSimilar,
     RefreshFacesJob,
+    RefreshPetsJob,
     RefreshMetadataJob,
     RegenerateThumbnailJob,
     TranscodeVideoJob,
@@ -403,6 +425,7 @@ const handleUnfavorite = async (asset: AssetResponseDto) => {
 const getAssetJobMessage = ($t: MessageFormatter, job: AssetJobName) => {
   const messages: Record<AssetJobName, string> = {
     [AssetJobName.RefreshFaces]: $t('refreshing_faces'),
+    [AssetJobName.RefreshPets]: $t('refreshing_pets'),
     [AssetJobName.RefreshMetadata]: $t('refreshing_metadata'),
     [AssetJobName.RegenerateThumbnail]: $t('regenerating_thumbnails'),
     [AssetJobName.TranscodeVideo]: $t('refreshing_encoded_video'),
@@ -417,6 +440,22 @@ const handleRunAssetJob = async (dto: AssetJobsDto) => {
   try {
     await runAssetJobs({ assetJobsDto: dto });
     toastManager.primary(getAssetJobMessage($t, dto.name));
+
+    if (dto.name === AssetJobName.RefreshPets && dto.assetIds.length === 1) {
+      try {
+        const [{ pets }] = await waitForWebsocketEvent(
+          'on_pet_update',
+          ({ assetId }) => assetId === dto.assetIds[0],
+          120_000,
+        );
+        toastManager.primary(
+          pets === 0 ? $t('refresh_pets_none_found') : $t('refresh_pets_complete', { values: { count: pets } }),
+        );
+      } catch {
+        // The queued job still runs if this page is closed or the browser
+        // disconnects before the completion event arrives.
+      }
+    }
   } catch (error) {
     handleError(error, $t('errors.unable_to_submit_job'));
   }

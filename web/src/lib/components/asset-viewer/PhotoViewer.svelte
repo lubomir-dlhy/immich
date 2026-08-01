@@ -10,6 +10,7 @@
   import { castManager } from '$lib/managers/cast-manager.svelte';
   import { faceManager } from '$lib/stores/face.svelte';
   import { ocrManager } from '$lib/stores/ocr.svelte';
+  import { petManager } from '$lib/stores/pet.svelte';
   import { SlideshowLook, SlideshowState, slideshowStore } from '$lib/stores/slideshow.store';
   import { handlePromiseError } from '$lib/utils';
   import { canCopyImageToClipboard, copyImageToClipboard } from '$lib/utils/asset-utils';
@@ -17,7 +18,7 @@
   import { handleError } from '$lib/utils/handle-error';
   import { getOcrBoundingBoxes } from '$lib/utils/ocr-utils';
   import { getBoundingBox, type BoundingBox } from '$lib/utils/people-utils';
-  import { type SharedLinkResponseDto } from '@immich/sdk';
+  import type { SharedLinkResponseDto } from '@immich/sdk';
   import { toastManager } from '@immich/ui';
   import { onDestroy, untrack } from 'svelte';
   import { useSwipe, type SwipeCustomEvent } from 'svelte-gestures';
@@ -57,6 +58,7 @@
   onDestroy(() => {
     assetViewerManager.clearHighlightedFaces();
     assetViewerManager.hideHiddenPeople();
+    assetViewerManager.hideHiddenPets();
   });
 
   let containerWidth = $state(0);
@@ -154,6 +156,7 @@
   );
 
   let adaptiveImage = $state<HTMLDivElement | undefined>();
+  const petSightings = $derived(petManager.data);
 
   const faceToNameMap = $derived.by(() => {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -171,6 +174,14 @@
   });
 
   const faces = $derived(Array.from(faceToNameMap.keys()));
+  const petRegions = $derived(
+    petSightings
+      .filter((sighting) => assetViewerManager.isShowingHiddenPets || !sighting.pet?.isHidden)
+      .map((sighting) => ({
+        ...sighting,
+        name: sighting.pet?.name || $t('unrecognized_pet'),
+      })),
+  );
 
   const boundingBoxes = $derived.by(() => {
     if (assetViewerManager.isFaceEditMode || ocrManager.showOverlay) {
@@ -183,16 +194,23 @@
       face: faces[index],
       name: faceToNameMap.get(faces[index]),
     }));
-
+    const petBoxes = getBoundingBox(petRegions, overlaySize);
+    for (let i = 0; i < petBoxes.length; i++) {
+      result.push({
+        ...petBoxes[i],
+        face: petRegions[i],
+        name: petRegions[i].name,
+      });
+    }
     if (assetViewerManager.highlightedFaces.length === 0) {
       return result;
     }
 
-    const knownIds = new Set(faces.map((f) => f.id));
+    const knownIds = new Set([...faces, ...petRegions].map(({ id }) => id));
     const unassignedFaces = assetViewerManager.highlightedFaces.filter((f) => !knownIds.has(f.id));
     const unassignedBoxes = getBoundingBox(unassignedFaces, overlaySize);
     for (let i = 0; i < unassignedBoxes.length; i++) {
-      result.push({ ...unassignedBoxes[i], face: unassignedFaces[i], name: undefined });
+      result.push({ ...unassignedBoxes[i], face: unassignedFaces[i], name: unassignedFaces[i].name });
     }
 
     return result;
@@ -287,6 +305,12 @@
   </AdaptiveImage>
 
   {#if assetViewerManager.isFaceEditMode && assetViewerManager.imgRef}
-    <FaceEditor htmlElement={assetViewerManager.imgRef} {containerWidth} {containerHeight} assetId={asset.id} />
+    <FaceEditor
+      htmlElement={assetViewerManager.imgRef}
+      {containerWidth}
+      {containerHeight}
+      assetId={asset.id}
+      mode={assetViewerManager.annotationMode}
+    />
   {/if}
 </div>

@@ -10,6 +10,7 @@ export const newMediaRepositoryMock = (): Mocked<RepositoryInterface<MediaReposi
     generateThumbhash: vitest.fn().mockResolvedValue(Buffer.from('')),
     decodeImage: vitest.fn().mockResolvedValue({ data: Buffer.from(''), info: {} }),
     extract: vitest.fn().mockResolvedValue(null),
+    extractVideoFrame: vitest.fn(),
     probe: vitest.fn(),
     probePackets: vitest.fn().mockResolvedValue({
       totalDuration: 0,

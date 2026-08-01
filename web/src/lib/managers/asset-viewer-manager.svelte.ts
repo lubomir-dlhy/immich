@@ -10,6 +10,7 @@ import { PersistedLocalStorage } from '$lib/utils/persisted';
 
 export interface Faces {
   id: string;
+  name?: string;
   imageHeight: number;
   imageWidth: number;
   boundingBoxX1: number;
@@ -34,6 +35,9 @@ export type Events = {
   ZoomChange: [ZoomImageWheelState];
   Copy: [];
   FaceEditModeChange: [boolean];
+  VideoTimeChange: [number];
+  VideoSeek: [number];
+  VideoFocus: [number];
 };
 
 class AssetViewerManager extends BaseEventManager<Events> {
@@ -55,11 +59,13 @@ class AssetViewerManager extends BaseEventManager<Events> {
   isPlayingMotionPhoto = $state(false);
   isShowEditor = $state(false);
   #isFaceEditMode = $state(false);
+  #annotationMode = $state<'people' | 'pets'>('people');
   #isEditFacesPanelOpen = $state(false);
   #viewingAssetStoreState = $state<AssetResponseDto>();
   #viewState = $state<boolean>(false);
   #highlightedFaces = $state<Faces[]>([]);
   #showingHiddenPeople = $state(false);
+  #showingHiddenPets = $state(false);
   gridScrollTarget = $state<AssetGridRouteSearchParams | null | undefined>();
 
   get asset() {
@@ -84,6 +90,10 @@ class AssetViewerManager extends BaseEventManager<Events> {
 
   get isFaceEditMode() {
     return this.#isFaceEditMode;
+  }
+
+  get annotationMode() {
+    return this.#annotationMode;
   }
 
   get isEditFacesPanelOpen() {
@@ -197,7 +207,16 @@ class AssetViewerManager extends BaseEventManager<Events> {
   }
 
   toggleFaceEditMode() {
-    this.#isFaceEditMode = !this.#isFaceEditMode;
+    const isClosing = this.#isFaceEditMode && this.#annotationMode === 'people';
+    this.#annotationMode = 'people';
+    this.#isFaceEditMode = !isClosing;
+    this.emit('FaceEditModeChange', this.#isFaceEditMode);
+  }
+
+  togglePetEditMode() {
+    const isClosing = this.#isFaceEditMode && this.#annotationMode === 'pets';
+    this.#annotationMode = 'pets';
+    this.#isFaceEditMode = !isClosing;
     this.emit('FaceEditModeChange', this.#isFaceEditMode);
   }
 
@@ -227,10 +246,19 @@ class AssetViewerManager extends BaseEventManager<Events> {
   }
 
   setHighlightedFaces(faces: Faces[]) {
+    if (
+      faces.length === this.#highlightedFaces.length &&
+      faces.every((face, index) => face.id === this.#highlightedFaces[index]?.id)
+    ) {
+      return;
+    }
     this.#highlightedFaces = faces;
   }
 
   clearHighlightedFaces() {
+    if (this.#highlightedFaces.length === 0) {
+      return;
+    }
     this.#highlightedFaces = [];
   }
 
@@ -244,6 +272,30 @@ class AssetViewerManager extends BaseEventManager<Events> {
 
   hideHiddenPeople() {
     this.#showingHiddenPeople = false;
+  }
+
+  get isShowingHiddenPets() {
+    return this.#showingHiddenPets;
+  }
+
+  toggleHiddenPets() {
+    this.#showingHiddenPets = !this.#showingHiddenPets;
+  }
+
+  hideHiddenPets() {
+    this.#showingHiddenPets = false;
+  }
+
+  setVideoTime(seconds: number) {
+    this.emit('VideoTimeChange', Math.max(0, seconds * 1000));
+  }
+
+  seekVideo(seconds: number) {
+    this.emit('VideoSeek', Math.max(0, seconds));
+  }
+
+  focusVideo(seconds: number) {
+    this.emit('VideoFocus', Math.max(0, seconds));
   }
 
   setAsset(asset: AssetResponseDto) {

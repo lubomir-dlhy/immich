@@ -188,6 +188,7 @@
         {#if isOwner}
           <hr />
           <ActionMenuItem action={Actions.RefreshFacesJob} />
+          <ActionMenuItem action={Actions.RefreshPetsJob} />
           <ActionMenuItem action={Actions.RefreshMetadataJob} />
           <ActionMenuItem action={Actions.RegenerateThumbnailJob} />
           <ActionMenuItem action={Actions.TranscodeVideoJob} />

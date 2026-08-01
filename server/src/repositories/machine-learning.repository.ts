@@ -14,6 +14,7 @@ export interface BoundingBox {
 
 export enum ModelTask {
   FACIAL_RECOGNITION = 'facial-recognition',
+  PET_RECOGNITION = 'pet-recognition',
   SEARCH = 'clip',
   OCR = 'ocr',
 }
@@ -27,7 +28,7 @@ export enum ModelType {
   OCR = 'ocr',
 }
 
-export type ModelPayload = { imagePath: string } | { text: string };
+export type ModelPayload = { imagePath: string } | { imageData: Buffer } | { text: string };
 
 type ModelOptions = { modelName: string };
 
@@ -74,7 +75,38 @@ export interface Face {
 
 export type FacialRecognitionResponse = { [ModelTask.FACIAL_RECOGNITION]: Face[] } & VisualResponse;
 export type DetectedFaces = { faces: Face[] } & VisualResponse;
-export type MachineLearningRequest = ClipVisualRequest | ClipTextualRequest | FacialRecognitionRequest | OcrRequest;
+export interface Pet {
+  boundingBox: BoundingBox;
+  embedding: string;
+  score: number;
+  species: string;
+}
+export type PetRecognitionRequest = {
+  [ModelTask.PET_RECOGNITION]: {
+    [ModelType.DETECTION]: ModelOptions & {
+      options: {
+        minScore: number;
+        manualBox?: {
+          imageWidth: number;
+          imageHeight: number;
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        };
+        manualSpecies?: string;
+      };
+    };
+    [ModelType.RECOGNITION]: ModelOptions;
+  };
+};
+export type PetRecognitionResponse = { [ModelTask.PET_RECOGNITION]: Pet[] } & VisualResponse;
+export type MachineLearningRequest =
+  | ClipVisualRequest
+  | ClipTextualRequest
+  | FacialRecognitionRequest
+  | PetRecognitionRequest
+  | OcrRequest;
 export type TextEncodingOptions = ModelOptions & { language?: string };
 
 @Injectable()
@@ -206,6 +238,71 @@ export class MachineLearningRepository {
     };
   }
 
+  async detectPets(
+    imagePath: string | Buffer,
+    options: {
+      detectionModelName: string;
+      recognitionModelName: string;
+      minScore: number;
+    },
+  ) {
+    const request = {
+      [ModelTask.PET_RECOGNITION]: {
+        [ModelType.DETECTION]: {
+          modelName: options.detectionModelName,
+          options: { minScore: options.minScore },
+        },
+        [ModelType.RECOGNITION]: { modelName: options.recognitionModelName },
+      },
+    };
+    const payload: ModelPayload = Buffer.isBuffer(imagePath) ? { imageData: imagePath } : { imagePath };
+    const response = await this.predict<PetRecognitionResponse>(payload, request);
+    return {
+      imageHeight: response.imageHeight,
+      imageWidth: response.imageWidth,
+      pets: response[ModelTask.PET_RECOGNITION],
+    };
+  }
+
+  async recognizePetRegion(
+    imagePath: string | Buffer,
+    options: {
+      detectionModelName: string;
+      recognitionModelName: string;
+      minScore: number;
+    },
+    region: {
+      imageWidth: number;
+      imageHeight: number;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      species: string;
+    },
+  ) {
+    const request: PetRecognitionRequest = {
+      [ModelTask.PET_RECOGNITION]: {
+        [ModelType.DETECTION]: {
+          modelName: options.detectionModelName,
+          options: {
+            minScore: options.minScore,
+            manualBox: region,
+            manualSpecies: region.species,
+          },
+        },
+        [ModelType.RECOGNITION]: { modelName: options.recognitionModelName },
+      },
+    };
+    const payload: ModelPayload = Buffer.isBuffer(imagePath) ? { imageData: imagePath } : { imagePath };
+    const response = await this.predict<PetRecognitionResponse>(payload, request);
+    return {
+      imageHeight: response.imageHeight,
+      imageWidth: response.imageWidth,
+      pet: response[ModelTask.PET_RECOGNITION][0],
+    };
+  }
+
   async encodeImage(imagePath: string, { modelName }: CLIPConfig) {
     const request = { [ModelTask.SEARCH]: { [ModelType.VISUAL]: { modelName } } };
     const response = await this.predict<ClipVisualResponse>({ imagePath }, request);
@@ -236,6 +333,8 @@ export class MachineLearningRepository {
     if ('imagePath' in payload) {
       const fileBuffer = await readFile(payload.imagePath);
       formData.append('image', new Blob([new Uint8Array(fileBuffer)]));
+    } else if ('imageData' in payload) {
+      formData.append('image', new Blob([new Uint8Array(payload.imageData)]));
     } else if ('text' in payload) {
       formData.append('text', payload.text);
     } else {

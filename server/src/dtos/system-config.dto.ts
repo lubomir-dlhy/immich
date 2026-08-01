@@ -6,6 +6,7 @@ import {
   DuplicateDetectionConfigSchema,
   FacialRecognitionConfigSchema,
   OcrConfigSchema,
+  PetRecognitionConfigSchema,
 } from 'src/dtos/model-config.dto';
 import {
   AudioCodecSchema,
@@ -186,6 +187,7 @@ const SystemConfigMachineLearningSchema = z
     clip: CLIPConfigSchema,
     duplicateDetection: DuplicateDetectionConfigSchema,
     facialRecognition: FacialRecognitionConfigSchema,
+    petRecognition: PetRecognitionConfigSchema,
     ocr: OcrConfigSchema,
   })
   .meta({ id: 'SystemConfigMachineLearningDto' });

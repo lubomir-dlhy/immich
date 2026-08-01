@@ -9,6 +9,8 @@
   import { mediaCapabilitiesManager } from '$lib/managers/media-capabilities-manager.svelte';
   import { autoPlayVideo, lang, loopVideo as loopVideoPreference } from '$lib/stores/preferences.store';
   import { getAssetHlsSessionUrl, getAssetHlsUrl, getAssetMediaUrl, getAssetPlaybackUrl } from '$lib/utils';
+  import { getNaturalSize, scaleToFit } from '$lib/utils/container-utils';
+  import { getBoundingBox } from '$lib/utils/people-utils';
   import { AssetMediaSize, type AssetResponseDto } from '@immich/sdk';
   import { Icon, LoadingSpinner, shortcuts } from '@immich/ui';
   import {
@@ -237,6 +239,19 @@
 
   onMount(() => {
     showVideo = true;
+    return assetViewerManager.on({
+      VideoSeek: (seconds) => {
+        if (videoPlayer) {
+          videoPlayer.currentTime = Math.min(seconds, videoPlayer.duration || seconds);
+        }
+      },
+      VideoFocus: (seconds) => {
+        if (videoPlayer) {
+          videoPlayer.pause();
+          videoPlayer.currentTime = Math.min(seconds, videoPlayer.duration || seconds);
+        }
+      },
+    });
   });
 
   $effect(() => {
@@ -316,16 +331,27 @@
 
   let containerWidth = $state(0);
   let containerHeight = $state(0);
+  const overlaySize = $derived.by(() => {
+    // Recompute after the video becomes ready, when videoWidth/videoHeight are populated.
+    void isLoading;
+    if (!videoPlayer) {
+      return { width: 0, height: 0 };
+    }
+
+    const natural = getNaturalSize(videoPlayer);
+    if (natural.width <= 0 || natural.height <= 0) {
+      return { width: 0, height: 0 };
+    }
+
+    return scaleToFit(natural, { width: containerWidth, height: containerHeight });
+  });
+  const highlightedPetBoxes = $derived(getBoundingBox(assetViewerManager.highlightedFaces, overlaySize));
 
   $effect(() => {
     if (assetViewerManager.isFaceEditMode) {
       videoPlayer?.pause();
     }
   });
-
-  // The time is only refreshed on HLS fragment decode by default,
-  // so manually emit events on seek to update it immediately.
-  const onSeeking = (event: Event) => event.currentTarget?.dispatchEvent(new Event('timeupdate'));
 </script>
 
 <svelte:body
@@ -352,7 +378,7 @@
 {#if showVideo}
   <div
     transition:fade={{ duration: assetViewerFadeDuration }}
-    class="flex h-full place-content-center place-items-center select-none"
+    class="relative flex h-full place-content-center place-items-center select-none"
     bind:clientWidth={containerWidth}
     bind:clientHeight={containerHeight}
   >
@@ -387,7 +413,8 @@
             class="h-full object-contain"
             oncanplay={(e: Event) => handleCanPlay(e.currentTarget as HTMLVideoElement)}
             onended={onVideoEnded}
-            onseeking={onSeeking}
+            ontimeupdate={(e: Event) =>
+              assetViewerManager.setVideoTime((e.currentTarget as HTMLVideoElement).currentTime)}
             onplaying={(e: Event) => {
               if (!hasFocused) {
                 (e.currentTarget as HTMLElement).focus();
@@ -410,7 +437,7 @@
             class="h-full object-contain"
             oncanplay={(e) => handleCanPlay(e.currentTarget)}
             onended={onVideoEnded}
-            onseeking={onSeeking}
+            ontimeupdate={(e) => assetViewerManager.setVideoTime(e.currentTarget.currentTime)}
             onplaying={(e) => {
               if (!hasFocused) {
                 e.currentTarget.focus();
@@ -480,6 +507,45 @@
         </div>
       </media-controller>
 
+      {#if highlightedPetBoxes.length > 0}
+        <div
+          class="pointer-events-none absolute top-1/2 left-1/2 z-2 -translate-x-1/2 -translate-y-1/2"
+          style:width={`${overlaySize.width}px`}
+          style:height={`${overlaySize.height}px`}
+          aria-live="polite"
+        >
+          <svg class="absolute inset-0 size-full" aria-hidden="true">
+            <defs>
+              <mask id={`pet-video-focus-${assetId}`}>
+                <rect width="100%" height="100%" fill="white" />
+                {#each highlightedPetBoxes as box (box.id)}
+                  <rect x={box.left} y={box.top} width={box.width} height={box.height} rx="8" fill="black" />
+                {/each}
+              </mask>
+            </defs>
+            <rect width="100%" height="100%" fill="rgba(0,0,0,0.28)" mask={`url(#pet-video-focus-${assetId})`} />
+          </svg>
+          {#each highlightedPetBoxes as box, index (box.id)}
+            {@const pet = assetViewerManager.highlightedFaces[index]}
+            <div
+              class="absolute rounded-lg border-3 border-white bg-transparent shadow-[0_0_0_2px_rgba(0,0,0,0.45),0_8px_28px_rgba(0,0,0,0.28)]"
+              style:top={`${box.top}px`}
+              style:left={`${box.left}px`}
+              style:width={`${box.width}px`}
+              style:height={`${box.height}px`}
+            >
+              {#if pet?.name}
+                <span
+                  class="absolute right-0 -bottom-1 translate-y-full rounded-md bg-white/95 px-2 py-1 text-xs font-semibold whitespace-nowrap text-black shadow-lg"
+                >
+                  {pet.name}
+                </span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+
       {#if isLoading}
         <div class="absolute flex place-content-center place-items-center">
           <LoadingSpinner />
@@ -487,7 +553,13 @@
       {/if}
 
       {#if assetViewerManager.isFaceEditMode && videoPlayer}
-        <FaceEditor htmlElement={videoPlayer} {containerWidth} {containerHeight} {assetId} />
+        <FaceEditor
+          htmlElement={videoPlayer}
+          {containerWidth}
+          {containerHeight}
+          {assetId}
+          mode={assetViewerManager.annotationMode}
+        />
       {/if}
     {/if}
   </div>

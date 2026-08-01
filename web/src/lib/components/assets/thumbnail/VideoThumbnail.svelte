@@ -84,6 +84,12 @@
       loading = false;
     }}
     ontimeupdate={({ currentTarget }) => {
+      currentTarget.dispatchEvent(
+        new CustomEvent('immich:thumbnail-video-timeupdate', {
+          bubbles: true,
+          detail: { currentTimeMs: currentTarget.currentTime * 1000 },
+        }),
+      );
       const remaining = currentTarget.duration - currentTarget.currentTime;
       remainingSeconds = Math.min(
         Math.ceil(Number.isNaN(remaining) ? Number.POSITIVE_INFINITY : remaining),

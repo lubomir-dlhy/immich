@@ -26,6 +26,8 @@
     mdiMagnify,
     mdiMap,
     mdiMapOutline,
+    mdiPaw,
+    mdiPawOutline,
     mdiTagMultipleOutline,
     mdiToolbox,
     mdiToolboxOutline,
@@ -50,6 +52,7 @@
 
   {#if authManager.preferences.people.enabled && authManager.preferences.people.sidebarWeb}
     <NavbarItem title={$t('people')} href={Route.people()} icon={mdiAccountOutline} activeIcon={mdiAccount} />
+    <NavbarItem title={$t('pets')} href={Route.pets()} icon={mdiPawOutline} activeIcon={mdiPaw} />
   {/if}
 
   {#if authManager.preferences.sharedLinks.enabled && authManager.preferences.sharedLinks.sidebarWeb}

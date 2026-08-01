@@ -31,6 +31,7 @@ const BaseSearchSchema = z.object({
   lensModel: z.string().nullable().optional().describe('Filter by lens model'),
   isNotInAlbum: z.boolean().optional().describe('Filter assets not in any album'),
   personIds: z.array(z.uuidv4()).optional().describe('Filter by person IDs'),
+  petIds: z.array(z.uuidv4()).optional().describe('Filter by pet IDs'),
   tagIds: z.array(z.uuidv4()).nullish().describe('Filter by tag IDs'),
   albumIds: z.array(z.uuidv4()).optional().describe('Filter by album IDs'),
   rating: z

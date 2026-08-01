@@ -406,6 +406,12 @@ export type JobItem =
   | { name: JobName.FacialRecognition; data: IDeferrableJob }
   | { name: JobName.PersonGenerateThumbnail; data: IEntityJob }
 
+  // Pet Recognition
+  | { name: JobName.AssetDetectPetsQueueAll; data: IBaseJob }
+  | { name: JobName.AssetDetectPets; data: IEntityJob }
+  | { name: JobName.PetRecognitionQueueAll; data: IBaseJob }
+  | { name: JobName.PetRecognition; data: IDeferrableJob }
+
   // Smart Search
   | { name: JobName.SmartSearchQueueAll; data: IBaseJob }
   | { name: JobName.SmartSearch; data: IEntityJob }

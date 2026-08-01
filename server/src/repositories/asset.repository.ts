@@ -37,6 +37,7 @@ import {
   anyUuid,
   asUuid,
   hasPeople,
+  hasPets,
   removeUndefinedKeys,
   truncatedDate,
   unnest,
@@ -86,6 +87,7 @@ interface AssetBuilderOptions {
   albumId?: string;
   tagId?: string;
   personId?: string;
+  petId?: string;
   userIds?: string[];
   // Fork: also include assets shared with this user via albums (in addition to userIds).
   sharedAlbumWithUserId?: string;
@@ -368,6 +370,7 @@ export class AssetRepository {
             {
               duplicatesDetectedAt: eb.ref('excluded.duplicatesDetectedAt'),
               facesRecognizedAt: eb.ref('excluded.facesRecognizedAt'),
+              petsRecognizedAt: eb.ref('excluded.petsRecognizedAt'),
               metadataExtractedAt: eb.ref('excluded.metadataExtractedAt'),
               ocrAt: eb.ref('excluded.ocrAt'),
             },
@@ -774,6 +777,7 @@ export class AssetRepository {
               .where('album_asset.albumId', '=', asUuid(options.albumId!)),
           )
           .$if(!!options.personId, (qb) => hasPeople(qb, [options.personId!]))
+          .$if(!!options.petId, (qb) => hasPets(qb, [options.petId!]))
           .$if(!!options.withStacked, (qb) =>
             qb
               .leftJoin('stack', (join) =>
@@ -875,6 +879,7 @@ export class AssetRepository {
             ),
           )
           .$if(!!options.personId, (qb) => hasPeople(qb, [options.personId!]))
+          .$if(!!options.petId, (qb) => hasPets(qb, [options.petId!]))
           .$if(!!options.userIds, (qb) =>
             qb.where((eb) => {
               const ownerMatch = eb('asset.ownerId', '=', anyUuid(options.userIds!));

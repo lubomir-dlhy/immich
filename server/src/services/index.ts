@@ -25,6 +25,7 @@ import { NotificationService } from 'src/services/notification.service';
 import { OcrService } from 'src/services/ocr.service';
 import { PartnerService } from 'src/services/partner.service';
 import { PersonService } from 'src/services/person.service';
+import { PetService } from 'src/services/pet.service';
 import { PluginService } from 'src/services/plugin.service';
 import { QueueService } from 'src/services/queue.service';
 import { SearchService } from 'src/services/search.service';
@@ -78,6 +79,7 @@ export const services = [
   OcrService,
   PartnerService,
   PersonService,
+  PetService,
   PluginService,
   QueueService,
   SearchService,

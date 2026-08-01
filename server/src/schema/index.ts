@@ -47,6 +47,8 @@ import { AssetMetadataAuditTable } from 'src/schema/tables/asset-metadata-audit.
 import { AssetMetadataTable } from 'src/schema/tables/asset-metadata.table';
 import { AssetOcrAuditTable } from 'src/schema/tables/asset-ocr-audit.table';
 import { AssetOcrTable } from 'src/schema/tables/asset-ocr.table';
+import { AssetPetIdentityTable } from 'src/schema/tables/asset-pet-identity.table';
+import { AssetPetTable } from 'src/schema/tables/asset-pet.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { GeodataPlacesTable } from 'src/schema/tables/geodata-places.table';
@@ -64,6 +66,8 @@ import { PartnerAuditTable } from 'src/schema/tables/partner-audit.table';
 import { PartnerTable } from 'src/schema/tables/partner.table';
 import { PersonAuditTable } from 'src/schema/tables/person-audit.table';
 import { PersonTable } from 'src/schema/tables/person.table';
+import { PetSearchTable } from 'src/schema/tables/pet-search.table';
+import { PetTable } from 'src/schema/tables/pet.table';
 import { PluginMethodTable } from 'src/schema/tables/plugin-method.table';
 import { PluginTable } from 'src/schema/tables/plugin.table';
 import { SessionTable } from 'src/schema/tables/session.table';
@@ -113,6 +117,8 @@ export class ImmichDatabase {
     AssetJobStatusTable,
     AssetOcrTable,
     AssetOcrAuditTable,
+    AssetPetTable,
+    AssetPetIdentityTable,
     AssetTable,
     AssetFileTable,
     AssetExifTable,
@@ -132,6 +138,8 @@ export class ImmichDatabase {
     PartnerTable,
     PersonTable,
     PersonAuditTable,
+    PetTable,
+    PetSearchTable,
     SessionTable,
     SharedLinkAssetTable,
     SharedLinkTable,
@@ -246,6 +254,11 @@ export interface DB {
 
   person: PersonTable;
   person_audit: PersonAuditTable;
+
+  pet: PetTable;
+  asset_pet: AssetPetTable;
+  asset_pet_identity: AssetPetIdentityTable;
+  pet_search: PetSearchTable;
 
   session: SessionTable;
   session_sync_checkpoint: SessionSyncCheckpointTable;

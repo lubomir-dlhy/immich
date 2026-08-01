@@ -3,6 +3,10 @@
   import { page } from '$app/state';
   import ActionMenuItem from '$lib/components/ActionMenuItem.svelte';
   import OnEvents from '$lib/components/OnEvents.svelte';
+  import PetSearchThumbnailOverlay from '$lib/components/pets/PetSearchThumbnailOverlay.svelte';
+  import PetSearchHeader from '$lib/components/pets/PetSearchHeader.svelte';
+  import PetReassignModal from '$lib/modals/PetReassignModal.svelte';
+  import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import ControlAppBar from '$lib/components/shared-components/ControlAppBar.svelte';
   import GalleryViewer from '$lib/components/shared-components/gallery-viewer/GalleryViewer.svelte';
@@ -34,16 +38,37 @@
   import {
     type AlbumResponseDto,
     type AssetResponseDto,
+    AssetTypeEnum,
     AssetVisibility,
+    getPet,
     getPerson,
+    getPets,
+    rejectPetAppearances,
     getTagById,
     type MetadataSearchDto,
+    type PetResponseDto,
     searchAssets,
     searchSmart,
     type SmartSearchDto,
   } from '@immich/sdk';
-  import { ActionButton, CommandPaletteDefaultProvider, Icon, IconButton, LoadingSpinner } from '@immich/ui';
-  import { mdiArrowLeft, mdiClose, mdiDotsVertical, mdiImageOffOutline, mdiSelectAll } from '@mdi/js';
+  import {
+    ActionButton,
+    CommandPaletteDefaultProvider,
+    Icon,
+    IconButton,
+    LoadingSpinner,
+    modalManager,
+    toastManager,
+  } from '@immich/ui';
+  import {
+    mdiArrowLeft,
+    mdiClose,
+    mdiDotsVertical,
+    mdiImageMove,
+    mdiImageOffOutline,
+    mdiPawOff,
+    mdiSelectAll,
+  } from '@mdi/js';
   import { tick, untrack } from 'svelte';
   import { t } from 'svelte-i18n';
 
@@ -61,17 +86,24 @@
   let isLoading = $state(true);
   let scrollY = $state(0);
   let scrollYHistory = 0;
+  let petRevision = $state(0);
+  const personNameRequests: Record<string, Promise<string>> = {};
+  const petRequests: Record<string, Promise<PetResponseDto>> = {};
+  const tagNameRequests: Record<string, Promise<string>> = {};
 
   type SearchTerms = MetadataSearchDto & Pick<SmartSearchDto, 'query' | 'queryAssetId'>;
   let searchQuery = $derived(page.url.searchParams.get(QueryParameter.QUERY));
   let smartSearchEnabled = $derived(featureFlagsManager.value.smartSearch);
   let terms = $derived<SearchTerms>(searchQuery ? JSON.parse(searchQuery) : {});
   let searchTermKeys = $derived(getObjectKeys(terms));
+  let currentPetId = $derived(Array.isArray(terms.petIds) && terms.petIds.length === 1 ? terms.petIds[0] : undefined);
 
   $effect(() => {
-    // we want this to *only* be reactive on `terms`
+    // Only the serialized URL query should restart the search. Tracking the
+    // parsed object can repeatedly invalidate this effect while an asset
+    // detail route is mounting.
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    terms;
+    searchQuery;
     untrack(() => handlePromiseError(onSearchQueryUpdate()));
   });
 
@@ -119,11 +151,73 @@
     assetMultiSelectManager.selectAssets(searchResultAssets.map((asset) => toTimelineAsset(asset)));
   };
 
+  const handleReassignPet = async () => {
+    if (!currentPetId) {
+      return;
+    }
+
+    try {
+      const pets = await getPets();
+      const source = pets.find(({ id }) => id === currentPetId);
+      if (!source) {
+        return;
+      }
+
+      const selectedAssetIds = assetMultiSelectManager.assets.map(({ id }) => id);
+      const reassigned = await modalManager.show(PetReassignModal, {
+        source,
+        assetIds: selectedAssetIds,
+        candidates: pets.filter(
+          (pet: PetResponseDto) => pet.id !== source.id && pet.species === source.species && !pet.isHidden,
+        ),
+      });
+      if (!reassigned) {
+        return;
+      }
+
+      const selectedIds = new Set(selectedAssetIds);
+      searchResultAssets = searchResultAssets.filter(({ id }) => !selectedIds.has(id));
+      assetMultiSelectManager.clear();
+    } catch (error) {
+      handleError(error, $t('failed_to_update_pet'));
+    }
+  };
+
+  const handleRejectPetAppearances = async () => {
+    if (!currentPetId) {
+      return;
+    }
+
+    const assetIds = assetMultiSelectManager.assets.map(({ id }) => id);
+    const confirmed = await modalManager.showDialog({
+      prompt: $t('not_a_pet_selected_confirmation', { values: { count: assetIds.length } }),
+      confirmText: $t('not_a_pet'),
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const { rejected } = await rejectPetAppearances({
+        id: currentPetId,
+        petRejectAppearancesDto: { assetIds },
+      });
+      assetMultiSelectManager.clear();
+      toastManager.primary($t('not_a_pet_selected_count', { values: { count: rejected } }));
+      await onPetAssignmentsUpdate();
+    } catch (error) {
+      handleError(error, $t('pet_assignment_failed'));
+    }
+  };
+
   async function onSearchQueryUpdate() {
     nextPage = 1;
     searchResultAssets = [];
     searchResultAlbums = [];
     await loadNextPage(true);
+    if (currentPetId && nextPage === 0 && searchResultAssets.length === 0) {
+      await goto(Route.pets(), { replaceState: true });
+    }
   }
 
   // eslint-disable-next-line svelte/valid-prop-names-in-kit-pages
@@ -186,6 +280,7 @@
       model: $t('camera_model'),
       lensModel: $t('lens_model'),
       personIds: $t('people'),
+      petIds: $t('pets'),
       tagIds: $t('tags'),
       originalFileName: $t('file_name_text'),
       originalPath: $t('full_path_or_folder'),
@@ -196,35 +291,60 @@
     return keyMap[key] || key;
   }
 
-  async function getPersonName(personIds: string[]) {
-    const personNames = await Promise.all(
-      personIds.map(async (personId) => {
-        const person = await getPerson({ id: personId });
+  function getPersonName(personIds: string[]) {
+    const key = personIds.join(',');
+    let request = personNameRequests[key];
+    if (request === undefined) {
+      request = Promise.all(
+        personIds.map(async (personId) => {
+          const person = await getPerson({ id: personId });
+          return person.name || $t('no_name');
+        }),
+      ).then((personNames) => personNames.join(', '));
+      personNameRequests[key] = request;
+    }
 
-        if (person.name == '') {
-          return $t('no_name');
-        }
-
-        return person.name;
-      }),
-    );
-
-    return personNames.join(', ');
+    return request;
   }
 
-  async function getTagNames(tagIds: string[] | null) {
-    if (tagIds === null) {
-      return $t('untagged');
-    }
-    const tagNames = await Promise.all(
-      tagIds.map(async (tagId) => {
-        const tag = await getTagById({ id: tagId });
-
-        return tag.value;
+  function getPetNames(petIds: string[]) {
+    return Promise.all(
+      petIds.map(async (petId) => {
+        try {
+          const pet = await getPetDetails(petId);
+          return pet.name || $t('unrecognized_pet');
+        } catch {
+          // A saved/shared search can outlive access to the pet identity.
+          // Keep the search usable even when its display label is no longer
+          // available to the current user.
+          return $t('unrecognized_pet');
+        }
       }),
-    );
+    ).then((petNames) => petNames.join(', '));
+  }
 
-    return tagNames.join(', ');
+  function getPetDetails(petId: string) {
+    return (petRequests[petId] ??= getPet({ id: petId }));
+  }
+
+  function getTagNames(tagIds: string[] | null) {
+    if (tagIds === null) {
+      return Promise.resolve($t('untagged'));
+    }
+
+    const key = tagIds.join(',');
+    let request = tagNameRequests[key];
+    if (request === undefined) {
+      request = Promise.all(
+        tagIds.map(async (tagId) => {
+          const tag = await getTagById({ id: tagId });
+          return tag.value;
+        }),
+      ).then((tagNames) => tagNames.join(', '));
+      tagNameRequests[key] = request;
+    }
+
+    return request;
   }
 
   const onAlbumAddAssets = ({ assetIds }: { assetIds: string[] }) => {
@@ -234,6 +354,16 @@
       const assetIdSet = new Set(assetIds);
       searchResultAssets = searchResultAssets.filter((asset) => !assetIdSet.has(asset.id));
     }
+  };
+
+  const onPetAssignmentsUpdate = async () => {
+    if (!currentPetId) {
+      return;
+    }
+
+    delete petRequests[currentPetId];
+    petRevision++;
+    await onSearchQueryUpdate();
   };
 
   function getObjectKeys<T extends object>(obj: T): (keyof T)[] {
@@ -249,7 +379,7 @@
 
 <svelte:window bind:scrollY />
 
-<OnEvents {onAlbumAddAssets} />
+<OnEvents {onAlbumAddAssets} {onPetAssignmentsUpdate} />
 
 {#if searchTermKeys.length > 0}
   <section id="search-chips" class="mx-auto mt-24 w-full max-w-7xl px-4 sm:px-8 lg:px-12">
@@ -272,6 +402,10 @@
               {:else if searchKey === 'personIds' && Array.isArray(value)}
                 {#await getPersonName(value) then personName}
                   {personName}
+                {/await}
+              {:else if searchKey === 'petIds' && Array.isArray(value)}
+                {#await getPetNames(value) then petNames}
+                  {petNames}
                 {/await}
               {:else if searchKey === 'tagIds' && (Array.isArray(value) || value === null)}
                 {#await getTagNames(value) then tagNames}
@@ -302,6 +436,12 @@
   </section>
 {/if}
 
+{#if currentPetId}
+  {#key `${currentPetId}:${petRevision}`}
+    <PetSearchHeader petId={currentPetId} petPromise={getPetDetails(currentPetId)} />
+  {/key}
+{/if}
+
 <section
   class="m-4 mb-12 max-h-screen bg-immich-bg dark:bg-immich-dark-bg"
   bind:clientHeight={viewport.height}
@@ -318,7 +458,18 @@
         {viewport}
         onReload={onSearchQueryUpdate}
         slidingWindowOffset={searchResultsElement.offsetTop}
-      />
+      >
+        {#snippet customThumbnailLayout(asset: AssetResponseDto, selected: boolean)}
+          {#if currentPetId && !assetViewerManager.isViewing}
+            <PetSearchThumbnailOverlay
+              assetId={asset.id}
+              petId={currentPetId}
+              isVideo={asset.type === AssetTypeEnum.Video}
+              {selected}
+            />
+          {/if}
+        {/snippet}
+      </GalleryViewer>
     {:else if !isLoading}
       <div class="flex min-h-[calc(66vh-11rem)] w-full place-content-center items-center dark:text-white">
         <div class="flex flex-col content-center items-center text-center">
@@ -344,6 +495,28 @@
           <CommandPaletteDefaultProvider name={$t('assets')} actions={Object.values(Actions)} />
 
           <CreateSharedLink />
+          {#if currentPetId}
+            <IconButton
+              shape="round"
+              color="secondary"
+              variant="ghost"
+              aria-label={$t('reassign_pet_photos')}
+              title={$t('reassign_pet_photos')}
+              icon={mdiImageMove}
+              onclick={handleReassignPet}
+            />
+            {#if assetMultiSelectManager.isAllUserOwned}
+              <IconButton
+                shape="round"
+                color="secondary"
+                variant="ghost"
+                aria-label={$t('not_a_pet')}
+                title={$t('not_a_pet')}
+                icon={mdiPawOff}
+                onclick={handleRejectPetAppearances}
+              />
+            {/if}
+          {/if}
           <IconButton
             shape="round"
             color="secondary"

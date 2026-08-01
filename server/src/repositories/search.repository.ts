@@ -93,6 +93,10 @@ export interface SearchPeopleOptions {
   personIds?: string[];
 }
 
+export interface SearchPetOptions {
+  petIds?: string[];
+}
+
 export interface SearchTagOptions {
   tagIds?: string[] | null;
 }
@@ -118,6 +122,7 @@ type BaseAssetSearchOptions = SearchDateOptions &
   SearchStatusOptions &
   SearchUserIdOptions &
   SearchPeopleOptions &
+  SearchPetOptions &
   SearchTagOptions &
   SearchAlbumOptions &
   SearchOcrOptions;
@@ -134,6 +139,7 @@ export type SmartSearchOptions = SearchDateOptions &
   Omit<SearchStatusOptions, 'visibility'> &
   SearchUserIdOptions &
   SearchPeopleOptions &
+  SearchPetOptions &
   SearchTagOptions &
   SearchOcrOptions & { visibility?: AssetVisibility | 'not-locked' };
 

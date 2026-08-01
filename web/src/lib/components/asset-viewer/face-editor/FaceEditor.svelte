@@ -1,14 +1,25 @@
 <script lang="ts">
   import { shortcut } from '$lib/actions/shortcut';
   import ImageThumbnail from '$lib/components/assets/thumbnail/ImageThumbnail.svelte';
+  import PetThumbnail from '$lib/components/pets/PetThumbnail.svelte';
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
+  import { eventManager } from '$lib/managers/event-manager.svelte';
   import FaceCreateTagModal from '$lib/modals/CreateFaceModal.svelte';
   import { faceManager } from '$lib/stores/face.svelte';
+  import { petManager } from '$lib/stores/pet.svelte';
   import { getPeopleThumbnailUrl } from '$lib/utils';
   import { getNaturalSize, scaleToFit } from '$lib/utils/container-utils';
   import { handleError } from '$lib/utils/handle-error';
   import { normalizeSearchString } from '$lib/utils/string-utils';
-  import { createFace, getAllPeople, type PersonResponseDto } from '@immich/sdk';
+  import {
+    createAssetPet,
+    createFace,
+    getAllPeople,
+    getPets,
+    Species,
+    type PersonResponseDto,
+    type PetResponseDto,
+  } from '@immich/sdk';
   import { Button, Input, modalManager, toastManager } from '@immich/ui';
   import { Canvas, InteractiveFabricObject, Rect } from 'fabric';
   import { clamp } from 'lodash-es';
@@ -20,9 +31,10 @@
     containerWidth: number;
     containerHeight: number;
     assetId: string;
+    mode?: 'people' | 'pets';
   };
 
-  let { htmlElement, containerWidth, containerHeight, assetId }: Props = $props();
+  let { htmlElement, containerWidth, containerHeight, assetId, mode = 'people' }: Props = $props();
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
   let canvas: Canvas | undefined = $state();
@@ -32,6 +44,7 @@
   let searchInputEl: HTMLInputElement | null = $state(null);
   let page = $state(1);
   let candidates = $state<PersonResponseDto[]>([]);
+  let petCandidates = $state<PetResponseDto[]>([]);
 
   let searchTerm = $state('');
   let faceBoxPosition = $state({ left: 0, top: 0, width: 0, height: 0 });
@@ -40,6 +53,13 @@
     searchTerm
       ? candidates.filter((person) => normalizeSearchString(person.name).includes(normalizeSearchString(searchTerm)))
       : candidates,
+  );
+  let filteredPetCandidates = $derived(
+    searchTerm
+      ? petCandidates.filter((pet) =>
+          normalizeSearchString(pet.name || pet.species).includes(normalizeSearchString(searchTerm)),
+        )
+      : petCandidates,
   );
 
   const configureControlStyle = () => {
@@ -83,7 +103,12 @@
 
   onMount(async () => {
     setupCanvas();
-    await getPeople();
+    if (mode === 'pets') {
+      const pets = await getPets();
+      petCandidates = pets.filter(({ isHidden }) => !isHidden);
+    } else {
+      await getPeople();
+    }
     await tick();
     searchInputEl?.focus();
   });
@@ -336,6 +361,59 @@
     }
   };
 
+  const tagPet = async (pet: PetResponseDto) => {
+    const data = getFaceCroppedCoordinates();
+    if (!data) {
+      toastManager.warning($t('error_tag_face_bounding_box'));
+      return;
+    }
+
+    const isConfirmed = await modalManager.showDialog({
+      prompt: $t('confirm_tag_pet', { values: { name: pet.name || $t('unrecognized_pet') } }),
+    });
+    if (!isConfirmed) {
+      return;
+    }
+
+    await savePet(data, pet.species === Species.Cat ? Species.Cat : Species.Dog, pet.id);
+  };
+
+  const createPet = async (species: Species) => {
+    const data = getFaceCroppedCoordinates();
+    if (!data) {
+      toastManager.warning($t('error_tag_face_bounding_box'));
+      return;
+    }
+    await savePet(data, species);
+  };
+
+  const savePet = async (data: FaceCoordinates, species: Species, petId?: string) => {
+    try {
+      const isVideo = htmlElement instanceof HTMLVideoElement;
+      const frameTimestampMs = isVideo ? Math.max(0, Math.round(htmlElement.currentTime * 1000)) : undefined;
+      const remainingDurationMs =
+        isVideo && Number.isFinite(htmlElement.duration)
+          ? Math.max(1, Math.round((htmlElement.duration - htmlElement.currentTime) * 1000))
+          : 1000;
+      await createAssetPet({
+        assetPetCreateDto: {
+          assetId,
+          petId,
+          species,
+          frameTimestampMs,
+          frameDurationMs: isVideo ? Math.min(1000, remainingDurationMs) : undefined,
+          ...data,
+        },
+      });
+      petManager.invalidate();
+      eventManager.emit('PetAssignmentsUpdate', { assetIds: [assetId] });
+      await assetViewerManager.setAssetId(assetId);
+      onClose();
+    } catch (error) {
+      handleError(error, $t('failed_to_update_pet'));
+    }
+  };
+
   const showCreateFaceModal = async () => {
     try {
       const data = getFaceCroppedCoordinates();
@@ -381,14 +459,37 @@
     bind:this={faceSelectorEl}
     class="absolute inset-s-[calc(50%-125px)] top-[calc(50%-250px)] w-62.5 max-w-62.5 rounded-xl border border-gray-200 bg-white px-2 py-4 backdrop-blur-sm transition-[top,left] duration-200 ease-out dark:border-gray-800 dark:bg-immich-dark-gray dark:text-immich-dark-fg"
   >
-    <p class="text-center text-sm">{$t('select_person_to_tag')}</p>
+    <p class="text-center text-sm">
+      {mode === 'pets' ? $t('select_pet_to_tag') : $t('select_person_to_tag')}
+    </p>
 
     <div class="relative my-3">
-      <Input placeholder={$t('search_people')} bind:value={searchTerm} bind:ref={searchInputEl} size="tiny" />
+      <Input
+        placeholder={mode === 'pets' ? $t('search_pets') : $t('search_people')}
+        bind:value={searchTerm}
+        bind:ref={searchInputEl}
+        size="tiny"
+      />
     </div>
 
     <div bind:this={scrollableListEl} class="mt-2 h-62.5 overflow-y-auto">
-      {#if filteredCandidates.length > 0}
+      {#if mode === 'pets' && filteredPetCandidates.length > 0}
+        <div class="mt-2 rounded-lg">
+          {#each filteredPetCandidates as pet (pet.id)}
+            <button
+              onclick={() => tagPet(pet)}
+              type="button"
+              class="flex w-full place-items-center gap-2 rounded-lg py-2 ps-1 pe-4 hover:bg-immich-primary/25"
+            >
+              <PetThumbnail {pet} class="size-8 rounded-full shadow-sm" />
+              <div class="min-w-0 text-start">
+                <p class="truncate text-sm">{pet.name || $t('unrecognized_pet')}</p>
+                <p class="text-xs text-gray-500 capitalize">{pet.species}</p>
+              </div>
+            </button>
+          {/each}
+        </div>
+      {:else if mode === 'people' && filteredCandidates.length > 0}
         <div class="mt-2 rounded-lg">
           {#each filteredCandidates as person (person.id)}
             <button
@@ -413,14 +514,27 @@
         </div>
       {:else}
         <div class="flex items-center justify-center py-4">
-          <p class="text-sm text-gray-500">{$t('no_people_found')}</p>
+          <p class="text-sm text-gray-500">
+            {mode === 'pets' ? $t('no_pets_found') : $t('no_people_found')}
+          </p>
         </div>
       {/if}
     </div>
 
-    <Button size="small" fullWidth onclick={showCreateFaceModal} variant="outline" class="mt-2">
-      {$t('create_person')}
-    </Button>
+    {#if mode === 'pets'}
+      <div class="mt-2 grid grid-cols-2 gap-2">
+        <Button size="small" fullWidth onclick={() => createPet(Species.Dog)} variant="outline">
+          {$t('create_new_dog')}
+        </Button>
+        <Button size="small" fullWidth onclick={() => createPet(Species.Cat)} variant="outline">
+          {$t('create_new_cat')}
+        </Button>
+      </div>
+    {:else}
+      <Button size="small" fullWidth onclick={showCreateFaceModal} variant="outline" class="mt-2">
+        {$t('create_person')}
+      </Button>
+    {/if}
 
     <Button size="small" fullWidth onclick={onClose} color="danger" class="mt-2">
       {$t('cancel')}

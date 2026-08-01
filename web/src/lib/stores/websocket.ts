@@ -32,6 +32,7 @@ export interface Events {
   on_asset_restore: (assetIds: string[]) => void;
   on_asset_stack_update: (assetIds: string[]) => void;
   on_person_thumbnail: (personId: string) => void;
+  on_pet_update: (event: { assetId: string; pets: number }) => void;
   on_server_version: (serverVersion: ServerVersionResponseDto) => void;
   on_config_update: () => void;
   on_new_release: (event: ReleaseEventV1) => void;
@@ -84,6 +85,7 @@ websocket
   .on('on_asset_trash', (assets) => eventManager.emit('AssetsDelete', assets))
   .on('on_asset_update', (asset) => eventManager.emit('AssetUpdate', asset))
   .on('on_person_thumbnail', (id) => eventManager.emit('PersonThumbnailReady', { id }))
+  .on('on_pet_update', ({ assetId }) => eventManager.emit('PetAssignmentsUpdate', { assetIds: [assetId] }))
   .on('on_notification', () => notificationManager.refresh())
   .on('connect_error', (e) => console.log('Websocket Connect Error', e));
 

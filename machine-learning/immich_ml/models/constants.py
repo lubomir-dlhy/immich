@@ -88,6 +88,10 @@ _PADDLE_MODELS = {
     "TH__PP-OCRv5_mobile",
 }
 
+_YOLOX_MODELS = {"yolox_s", "yolox_m", "yolox_x"}
+_D_FINE_MODELS = {"dfine_l_coco"}
+_ANIMAL_ID_MODELS = {"AnimalID-CLIP-ViT-B-32"}
+
 SUPPORTED_PROVIDERS = [
     "CUDAExecutionProvider",
     "MIGraphXExecutionProvider",
@@ -163,6 +167,9 @@ WEBLATE_TO_FLORES200 = {
 def get_model_source(model_name: str) -> ModelSource | None:
     cleaned_name = clean_name(model_name)
 
+    if cleaned_name in _ANIMAL_ID_MODELS:
+        return ModelSource.ANIMAL_ID
+
     if cleaned_name in _INSIGHTFACE_MODELS:
         return ModelSource.INSIGHTFACE
 
@@ -174,5 +181,11 @@ def get_model_source(model_name: str) -> ModelSource | None:
 
     if cleaned_name in _PADDLE_MODELS:
         return ModelSource.PADDLE
+
+    if cleaned_name in _YOLOX_MODELS:
+        return ModelSource.YOLOX
+
+    if cleaned_name in _D_FINE_MODELS:
+        return ModelSource.D_FINE
 
     return None

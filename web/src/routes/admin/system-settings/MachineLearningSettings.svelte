@@ -8,7 +8,9 @@
   import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
-  import { Button, IconButton } from '@immich/ui';
+  import { handleError } from '$lib/utils/handle-error';
+  import { runPetRecognition } from '@immich/sdk';
+  import { Button, IconButton, toastManager } from '@immich/ui';
   import { mdiPlus, mdiTrashCanOutline } from '@mdi/js';
   import { isEqual } from 'lodash-es';
   import { t } from 'svelte-i18n';
@@ -17,6 +19,30 @@
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
   let configToEdit = $state(systemConfigManager.cloneValue());
+  let isRunningPetRecognition = $state(false);
+
+  const handleRunPetRecognition = async ({ force = false, recluster = false } = {}) => {
+    if (isRunningPetRecognition) {
+      return;
+    }
+    isRunningPetRecognition = true;
+    try {
+      await runPetRecognition({ petRecognitionRunDto: { force, recluster } });
+      toastManager.primary(
+        $t(
+          recluster
+            ? 'admin.pet_recognition_recluster_queued'
+            : force
+              ? 'admin.pet_recognition_all_queued'
+              : 'admin.pet_recognition_missing_queued',
+        ),
+      );
+    } catch (error) {
+      handleError(error, $t('admin.pet_recognition_queue_failed'));
+    } finally {
+      isRunningPetRecognition = false;
+    }
+  };
 </script>
 
 <div class="mt-2">
@@ -251,6 +277,127 @@
             isEdited={configToEdit.machineLearning.facialRecognition.minFaces !==
               config.machineLearning.facialRecognition.minFaces}
           />
+        </div>
+      </SettingAccordion>
+
+      <SettingAccordion
+        key="pet-recognition"
+        title={$t('admin.machine_learning_pet_recognition')}
+        subtitle={$t('admin.machine_learning_pet_recognition_description')}
+      >
+        <div class="ms-4 mt-4 flex flex-col gap-4">
+          <SettingSwitch
+            title={$t('admin.machine_learning_pet_recognition_setting')}
+            subtitle={$t('admin.machine_learning_pet_recognition_setting_description')}
+            bind:checked={configToEdit.machineLearning.petRecognition.enabled}
+            disabled={disabled || !configToEdit.machineLearning.enabled}
+          />
+
+          <hr />
+
+          <SettingSelect
+            label={$t('admin.machine_learning_pet_detection_model')}
+            desc={$t('admin.machine_learning_pet_detection_model_description')}
+            name="pet-detection-model"
+            bind:value={configToEdit.machineLearning.petRecognition.detectionModelName}
+            options={[
+              { value: 'dfine_l_coco', text: 'D-FINE-L (recommended, COCO cats and dogs)' },
+              { value: 'yolox_x', text: 'YOLOX-X (legacy, COCO cats and dogs)' },
+              { value: 'yolox_m', text: 'YOLOX-M (legacy, COCO cats and dogs)' },
+              { value: 'yolox_s', text: 'YOLOX-S (legacy, COCO cats and dogs)' },
+            ]}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled}
+            isEdited={configToEdit.machineLearning.petRecognition.detectionModelName !==
+              config.machineLearning.petRecognition.detectionModelName}
+          />
+
+          <SettingSelect
+            label={$t('admin.machine_learning_pet_embedding_model')}
+            desc={$t('admin.machine_learning_pet_embedding_model_description')}
+            name="pet-embedding-model"
+            bind:value={configToEdit.machineLearning.petRecognition.recognitionModelName}
+            options={[{ value: 'ViT-B-32__openai', text: 'ViT-B-32 OpenAI (512 dimensions)' }]}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled}
+            isEdited={configToEdit.machineLearning.petRecognition.recognitionModelName !==
+              config.machineLearning.petRecognition.recognitionModelName}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_pet_min_detection_score')}
+            description={$t('admin.machine_learning_pet_min_detection_score_description')}
+            bind:value={configToEdit.machineLearning.petRecognition.minScore}
+            step="0.01"
+            min={0.1}
+            max={1}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled}
+            isEdited={configToEdit.machineLearning.petRecognition.minScore !==
+              config.machineLearning.petRecognition.minScore}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_pet_max_distance')}
+            description={$t('admin.machine_learning_pet_max_distance_description')}
+            bind:value={configToEdit.machineLearning.petRecognition.maxDistance}
+            step="0.01"
+            min={0.01}
+            max={2}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled}
+            isEdited={configToEdit.machineLearning.petRecognition.maxDistance !==
+              config.machineLearning.petRecognition.maxDistance}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_pet_min_sightings')}
+            description={$t('admin.machine_learning_pet_min_sightings_description')}
+            bind:value={configToEdit.machineLearning.petRecognition.minPets}
+            step="1"
+            min={1}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled}
+            isEdited={configToEdit.machineLearning.petRecognition.minPets !==
+              config.machineLearning.petRecognition.minPets}
+          />
+
+          <div class="flex flex-wrap justify-end gap-2 pt-2">
+            <Button
+              size="small"
+              shape="round"
+              disabled={isRunningPetRecognition || !configToEdit.machineLearning.petRecognition.enabled}
+              onclick={() => void handleRunPetRecognition()}
+            >
+              {$t('admin.pet_recognition_run_missing')}
+            </Button>
+            <Button
+              size="small"
+              shape="round"
+              color="secondary"
+              disabled={isRunningPetRecognition || !configToEdit.machineLearning.petRecognition.enabled}
+              onclick={() => void handleRunPetRecognition({ recluster: true })}
+            >
+              {$t('admin.pet_recognition_recluster')}
+            </Button>
+            <Button
+              size="small"
+              shape="round"
+              color="danger"
+              disabled={isRunningPetRecognition || !configToEdit.machineLearning.petRecognition.enabled}
+              onclick={() => void handleRunPetRecognition({ force: true })}
+            >
+              {$t('admin.pet_recognition_reprocess_all')}
+            </Button>
+          </div>
         </div>
       </SettingAccordion>
 

@@ -5,6 +5,8 @@ import _ from 'lodash';
 import { Duration } from 'luxon';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 import { Writable } from 'node:stream';
 import sharp from 'sharp';
 import { ORIENTATION_TO_SHARP_ROTATION } from 'src/constants';
@@ -88,6 +90,34 @@ export class MediaRepository {
       }
     }
     return null;
+  }
+
+  async extractVideoFrame(input: string, timestampMs: number): Promise<Buffer> {
+    const folder = await fs.mkdtemp(join(tmpdir(), 'immich-pet-frames-'));
+    let filenames: string[] = [];
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(input, { niceness: 10 })
+          .on('filenames', (generatedFilenames: string[]) => (filenames = generatedFilenames))
+          .on('start', (command: string) => this.logger.debug(command))
+          .on('error', reject)
+          .on('end', () => resolve())
+          .screenshots({
+            timestamps: [timestampMs / 1000],
+            filename: 'frame-%i.jpg',
+            folder,
+          });
+      });
+
+      const filename = filenames[0];
+      if (!filename) {
+        throw new Error(`Could not extract video frame at ${timestampMs}ms`);
+      }
+      return await fs.readFile(isAbsolute(filename) ? filename : join(folder, filename));
+    } finally {
+      await fs.rm(folder, { recursive: true, force: true });
+    }
   }
 
   async writeExif(tags: Partial<Exif>, output: string): Promise<boolean> {

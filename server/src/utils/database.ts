@@ -278,6 +278,34 @@ export function hasPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personIds: 
   );
 }
 
+export function hasPets<O>(qb: SelectQueryBuilder<DB, 'asset', O>, petIds: string[]) {
+  return qb.innerJoin(
+    (eb) =>
+      eb
+        .selectFrom((inner) =>
+          inner
+            .selectFrom('asset_pet')
+            .select(['asset_pet.assetId as assetId', 'asset_pet.petId as petId'])
+            .where('asset_pet.petId', 'is not', null)
+            .where('asset_pet.isRejected', '=', false)
+            .unionAll(
+              inner
+                .selectFrom('asset_pet_identity')
+                .innerJoin('asset_pet', 'asset_pet.id', 'asset_pet_identity.petAssetId')
+                .select(['asset_pet.assetId as assetId', 'asset_pet_identity.petId as petId'])
+                .where('asset_pet.isRejected', '=', false),
+            )
+            .as('pet_links'),
+        )
+        .select('pet_links.assetId')
+        .where('pet_links.petId', '=', anyUuid(petIds))
+        .groupBy('pet_links.assetId')
+        .having((eb) => eb.fn.count('pet_links.petId').distinct(), '=', petIds.length)
+        .as('has_pets'),
+    (join) => join.onRef('has_pets.assetId', '=', 'asset.id'),
+  );
+}
+
 export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: string[]) {
   return qb.innerJoin(
     (eb) =>
@@ -436,6 +464,7 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
       qb.where((eb) => eb.not(eb.exists((eb) => eb.selectFrom('tag_asset').whereRef('assetId', '=', 'asset.id')))),
     )
     .$if(!!options.personIds && options.personIds.length > 0, (qb) => hasPeople(qb, options.personIds!))
+    .$if(!!options.petIds && options.petIds.length > 0, (qb) => hasPets(qb, options.petIds!))
     .$if(!!options.createdBefore, (qb) => qb.where('asset.createdAt', '<=', options.createdBefore!))
     .$if(!!options.createdAfter, (qb) => qb.where('asset.createdAt', '>=', options.createdAfter!))
     .$if(!!options.updatedBefore, (qb) => qb.where('asset.updatedAt', '<=', options.updatedBefore!))

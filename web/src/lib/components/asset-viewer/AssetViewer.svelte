@@ -17,6 +17,7 @@
   import { getAssetActions } from '$lib/services/asset.service';
   import { faceManager } from '$lib/stores/face.svelte';
   import { ocrManager } from '$lib/stores/ocr.svelte';
+  import { petManager } from '$lib/stores/pet.svelte';
   import { alwaysLoadOriginalVideo } from '$lib/stores/preferences.store';
   import { SlideshowNavigation, SlideshowState, slideshowStore } from '$lib/stores/slideshow.store';
   import { getSharedLink, handlePromiseError } from '$lib/utils';
@@ -380,6 +381,7 @@
     await refreshStack();
     ocrManager.clear();
     faceManager.clear();
+    petManager.clear();
     if (!sharedLink) {
       if (previewStackedAsset) {
         await ocrManager.getAssetOcr(previewStackedAsset.id);
@@ -388,6 +390,7 @@
       await ocrManager.getAssetOcr(asset.id);
       await faceManager.getAssetFaces(asset.id);
     }
+    await petManager.getAssetPets(previewStackedAsset?.id ?? asset.id);
   };
 
   $effect(() => {

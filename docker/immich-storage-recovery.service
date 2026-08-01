@@ -1,0 +1,16 @@
+[Unit]
+Description=Recover Immich storage after delayed NAS startup
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/immich-storage-recovery
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

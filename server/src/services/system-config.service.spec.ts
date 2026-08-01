@@ -129,6 +129,14 @@ const updatedConfig = Object.freeze<SystemConfig>({
       maxDistance: 0.5,
       minFaces: 3,
     },
+    petRecognition: {
+      enabled: true,
+      detectionModelName: 'dfine_l_coco',
+      recognitionModelName: 'AnimalID-CLIP-ViT-B-32',
+      minScore: 0.65,
+      maxDistance: 0.2,
+      minPets: 3,
+    },
     ocr: {
       enabled: true,
       modelName: 'PP-OCRv5_mobile',

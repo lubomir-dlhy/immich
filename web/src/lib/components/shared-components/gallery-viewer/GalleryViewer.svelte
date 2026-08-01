@@ -27,6 +27,7 @@
   import { AssetVisibility, type AssetResponseDto } from '@immich/sdk';
   import { modalManager } from '@immich/ui';
   import { debounce } from 'lodash-es';
+  import type { Snippet } from 'svelte';
   import { t } from 'svelte-i18n';
 
   const {
@@ -47,6 +48,7 @@
     slidingWindowOffset?: number;
     arrowNavigation?: boolean;
     allowDeletion?: boolean;
+    customThumbnailLayout?: Snippet<[asset: AssetResponseDto, selected: boolean]>;
   };
 
   let {
@@ -63,6 +65,7 @@
     pageHeaderOffset = 0,
     arrowNavigation = true,
     allowDeletion = true,
+    customThumbnailLayout,
   }: Props = $props();
 
   const navigationAssets = $derived(viewerAssets ?? assets);
@@ -347,6 +350,7 @@
     {#each assets as asset, index (asset.id + '-' + index)}
       {#if isInOrNearViewport(index)}
         {@const currentAsset = toTimelineAsset(asset)}
+        {@const selected = assetInteraction.hasSelectedAsset(currentAsset.id)}
         <div class="absolute" style:overflow="clip" style={getStyle(index)}>
           <Thumbnail
             readonly={disableAssetSelect}
@@ -362,11 +366,12 @@
             onMouseEvent={() => assetMouseEventHandler(currentAsset)}
             {showArchiveIcon}
             asset={currentAsset}
-            selected={assetInteraction.hasSelectedAsset(currentAsset.id)}
+            {selected}
             selectionCandidate={assetInteraction.hasSelectionCandidate(currentAsset.id)}
             thumbnailWidth={geometry.getWidth(index)}
             thumbnailHeight={geometry.getHeight(index)}
           />
+          {@render customThumbnailLayout?.(asset, selected)}
           {#if showAssetName && !isTimelineAsset(asset)}
             <div
               class="absolute bottom-0 w-full overflow-clip bg-slate-50/75 bg-linear-to-t p-1 text-center font-mono text-xs font-semibold text-ellipsis whitespace-pre-wrap dark:bg-slate-800/75"

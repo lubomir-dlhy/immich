@@ -269,6 +269,9 @@ export class JobRepository {
       case JobName.FacialRecognitionQueueAll: {
         return { deduplication: { id: JobName.FacialRecognitionQueueAll } };
       }
+      case JobName.PetRecognitionQueueAll: {
+        return { deduplication: { id: JobName.PetRecognitionQueueAll } };
+      }
       case JobName.VersionCheck: {
         return { deduplication: { id: JobName.VersionCheck } };
       }
