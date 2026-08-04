@@ -298,7 +298,7 @@ export class PetService extends BaseService {
     }
 
     const { machineLearning } = await this.getConfig({ withCache: true });
-    const matches = await this.petRepository.searchSuggestionCandidates(
+    const matches = await this.petRepository.searchIdentityCandidates(
       auth.user.id,
       sighting.species,
       embedding,
@@ -930,13 +930,14 @@ export class PetService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    const centroidMatch = await this.petRepository.searchCentroids(
+    const identityMatch = await this.petRepository.searchIdentityCandidates(
       sighting.asset.ownerId,
       sighting.species,
       embedding,
       config.maxDistance,
+      1,
     );
-    let petId = centroidMatch?.petId;
+    let petId = identityMatch.at(0)?.petId;
 
     if (isCore && !petId) {
       const pet = await this.petRepository.create({
@@ -985,13 +986,14 @@ export class PetService extends BaseService {
       species: sighting.species,
     });
 
-    const centroidMatch = await this.petRepository.searchCentroids(
+    const identityMatch = await this.petRepository.searchIdentityCandidates(
       userId,
       sighting.species,
       sighting.embedding,
       config.maxDistance,
+      1,
     );
-    let petId = centroidMatch?.petId;
+    let petId = identityMatch.at(0)?.petId;
 
     const isCore = matches.length >= config.minPets && sighting.visibility === AssetVisibility.Timeline;
     if (!petId && isCore) {

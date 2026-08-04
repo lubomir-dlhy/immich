@@ -241,79 +241,7 @@ export class PetRepository {
     return result?.petId ?? undefined;
   }
 
-  async searchCentroids(
-    ownerId: string,
-    species: string,
-    embedding: string,
-    maxDistance: number,
-  ): Promise<{ petId: string; distance: number } | undefined> {
-    const candidates = await this.searchCentroidCandidates(ownerId, species, embedding, maxDistance, 1);
-    return candidates.at(0);
-  }
-
-  async searchCentroidCandidates(
-    ownerId: string,
-    species: string,
-    embedding: string,
-    maxDistance: number,
-    limit: number,
-  ): Promise<Array<{ petId: string; distance: number }>> {
-    const { rows } = await sql<{ petId: string; distance: number }>`
-      WITH assignments AS (
-        SELECT asset_pet."petId", asset_pet."assetId", pet_search.embedding
-        FROM asset_pet
-        INNER JOIN pet_search ON pet_search."petAssetId" = asset_pet.id
-        WHERE asset_pet."petId" IS NOT NULL
-          AND asset_pet."isRejected" = false
-        UNION ALL
-        SELECT asset_pet_identity."petId", asset_pet."assetId", pet_search.embedding
-        FROM asset_pet_identity
-        INNER JOIN asset_pet ON asset_pet.id = asset_pet_identity."petAssetId"
-        INNER JOIN pet_search ON pet_search."petAssetId" = asset_pet_identity."petAssetId"
-        WHERE asset_pet."isRejected" = false
-      ),
-      asset_embeddings AS (
-        SELECT "petId", "assetId", avg(embedding) AS embedding
-        FROM assignments
-        GROUP BY "petId", "assetId"
-      ),
-      centroids AS (
-        SELECT
-          pet.id AS "petId",
-          CASE
-            -- Once a pet is named, keep automatic recognition anchored to the
-            -- sighting the user named instead of letting later matches move
-            -- the centroid toward another similar-looking animal.
-            WHEN pet.name <> '' THEN COALESCE(
-              feature_search.embedding,
-              (SELECT avg(asset_embeddings.embedding) FROM asset_embeddings WHERE asset_embeddings."petId" = pet.id)
-            )
-            ELSE COALESCE(
-              (SELECT avg(asset_embeddings.embedding) FROM asset_embeddings WHERE asset_embeddings."petId" = pet.id),
-              feature_search.embedding
-            )
-          END AS centroid
-        FROM pet
-        LEFT JOIN pet_search AS feature_search ON feature_search."petAssetId" = pet."featurePetAssetId"
-        WHERE pet."ownerId" = ${ownerId}
-          AND pet.species = ${species}
-      ),
-      ranked AS (
-        SELECT "petId", centroid <=> ${embedding} AS distance
-        FROM centroids
-        WHERE centroid IS NOT NULL
-      )
-      SELECT "petId", distance
-      FROM ranked
-      WHERE distance <= ${maxDistance}
-      ORDER BY distance
-      LIMIT ${limit}
-    `.execute(this.db);
-
-    return rows;
-  }
-
-  async searchSuggestionCandidates(
+  async searchIdentityCandidates(
     ownerId: string,
     species: string,
     embedding: string,
@@ -352,9 +280,9 @@ export class PetRepository {
         FROM asset_embeddings
       ),
       ranked AS (
-        -- Manual suggestions need to tolerate pose, scale and camera changes.
-        -- The closest three distinct media examples are substantially more
-        -- representative than a named pet's single featured image.
+        -- Like face recognition, identity matching uses actual assigned
+        -- examples. Three distinct media tolerate pose, scale and camera
+        -- changes without allowing one accidental match to dominate.
         SELECT "petId", avg(distance) AS distance
         FROM nearest_examples
         WHERE example_rank <= 3

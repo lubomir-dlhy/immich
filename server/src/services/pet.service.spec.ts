@@ -50,6 +50,7 @@ describe(PetService.name, () => {
     mocks.person.getAdditionalAccessUserIds.mockResolvedValue([]);
     mocks.pet.getSightingsForSharedRecognition.mockReturnValue(makeStream([]));
     mocks.pet.deleteSharedIdentitiesWithoutAccess.mockResolvedValue([]);
+    mocks.pet.searchIdentityCandidates.mockResolvedValue([]);
   });
 
   it('gets a single pet owned by the current user', async () => {
@@ -109,7 +110,7 @@ describe(PetService.name, () => {
     mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([sighting.assetId]));
     mocks.pet.getAssetForDetection.mockResolvedValue({ pets: [sighting] } as never);
     mocks.pet.getTrackEmbedding.mockResolvedValue('[0.1,0.2]');
-    mocks.pet.searchSuggestionCandidates.mockResolvedValue([
+    mocks.pet.searchIdentityCandidates.mockResolvedValue([
       { petId: currentPetId, distance: 0.01 },
       { petId: mikiId, distance: 0.12 },
     ]);
@@ -119,8 +120,7 @@ describe(PetService.name, () => {
     await expect(
       sut.getTrackSuggestions({ user: { id: ownerId } } as never, sighting.assetId, sighting.trackId),
     ).resolves.toEqual([{ pet: expect.objectContaining({ id: mikiId, name: 'Miki' }), distance: 0.12 }]);
-    expect(mocks.pet.searchSuggestionCandidates).toHaveBeenCalledWith(ownerId, 'dog', '[0.1,0.2]', 0.2, 8);
-    expect(mocks.pet.searchCentroidCandidates).not.toHaveBeenCalled();
+    expect(mocks.pet.searchIdentityCandidates).toHaveBeenCalledWith(ownerId, 'dog', '[0.1,0.2]', 0.2, 8);
   });
 
   it('projects pet centroids and reports the nearest same-species identity', async () => {
@@ -877,7 +877,7 @@ describe(PetService.name, () => {
     mocks.person.getAdditionalAccessUserIds.mockResolvedValue([viewerId]);
     mocks.pet.hasIdentityForUser.mockResolvedValue(false);
     mocks.pet.search.mockResolvedValue([]);
-    mocks.pet.searchCentroids.mockResolvedValue({ petId: viewerPetId, distance: 0.05 });
+    mocks.pet.searchIdentityCandidates.mockResolvedValue([{ petId: viewerPetId, distance: 0.05 }]);
 
     await expect(sut.handleRecognizePet({ id: sighting.id, deferred: false })).resolves.toBe(JobStatus.Skipped);
 
@@ -885,7 +885,22 @@ describe(PetService.name, () => {
     expect(mocks.pet.assign).not.toHaveBeenCalled();
   });
 
-  it('does not chain an owner sighting through a nearby cluster member when the centroid does not match', async () => {
+  it('assigns an owner sighting using multi-example identity matching', async () => {
+    const mikiId = '60000000-0000-4000-8000-000000000005';
+    mocks.pet.getSightingForRecognition.mockResolvedValue(sighting);
+    mocks.pet.search.mockResolvedValue([
+      { id: sighting.id, petId: null, distance: 0 },
+      { id: 'nearby-member', petId: null, distance: 0.04 },
+    ]);
+    mocks.pet.searchIdentityCandidates.mockResolvedValue([{ petId: mikiId, distance: 0.038 }]);
+
+    await expect(sut.handleRecognizePet({ id: sighting.id, deferred: true })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.pet.searchIdentityCandidates).toHaveBeenCalledWith(sighting.asset.ownerId, 'dog', '[0.1,0.2]', 0.2, 1);
+    expect(mocks.pet.assign).toHaveBeenCalledWith(sighting.id, mikiId);
+  });
+
+  it('does not chain an owner sighting through a nearby cluster member when identity matching fails', async () => {
     mocks.pet.getSightingForRecognition.mockResolvedValue(sighting);
     mocks.pet.search.mockResolvedValue([
       { id: sighting.id, petId: null, distance: 0 },
