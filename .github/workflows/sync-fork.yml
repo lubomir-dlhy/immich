@@ -2,26 +2,28 @@ name: Upstream Sync
 
 on:
   schedule:
-    - cron: "0 7 * * *"
+    - cron: '0 7 * * *'
   # scheduled at 07:00 every day
 
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   sync_latest_from_upstream:
     runs-on: ubuntu-latest
     name: Sync latest commits from upstream repo
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout target repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Check for new upstream commits
         id: check
@@ -40,6 +42,8 @@ jobs:
         if: steps.check.outputs.new_commits > 0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_COMMITS: ${{ steps.check.outputs.new_commits }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           SYNC_BRANCH="upstream-sync"
 
@@ -62,7 +66,7 @@ jobs:
 
           # Check if a sync PR already exists (use REST API — GraphQL is
           # restricted on forked repos even with correct permissions)
-          EXISTING_PR=$(gh api repos/${{ github.repository }}/pulls \
+          EXISTING_PR=$(gh api "repos/$REPOSITORY/pulls" \
             --jq ".[] | select(.head.ref==\"$SYNC_BRANCH\" and .state==\"open\") | .number" \
             2>/dev/null | head -1)
           if [ -n "$EXISTING_PR" ]; then
@@ -71,11 +75,11 @@ jobs:
           fi
 
           # Create the PR via REST API
-          gh api repos/${{ github.repository }}/pulls \
+          gh api "repos/$REPOSITORY/pulls" \
             -f title="sync: merge upstream immich-app/immich" \
             -f body="Automated PR to sync with upstream immich-app/immich.
 
-          **${{ steps.check.outputs.new_commits }}** new commits from upstream.
+          **$NEW_COMMITS** new commits from upstream.
 
           > Created automatically by the Upstream Sync workflow." \
             -f head="$SYNC_BRANCH" \
