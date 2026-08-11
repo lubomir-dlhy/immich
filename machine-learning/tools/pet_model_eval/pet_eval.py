@@ -24,6 +24,11 @@ from PIL import Image, ImageDraw, ImageOps
 
 
 MODEL_SPECS = {
+    "avito-clip-base": (
+        "AvitoTech/CLIP-ViT-base-for-animal-identification",
+        "native",
+        "openai/clip-vit-base-patch32",
+    ),
     "avito-dinov2-small": (
         "AvitoTech/DINO-v2-small-for-animal-identification",
         "dinov2",
@@ -44,6 +49,12 @@ MODEL_SPECS = {
         "siglip",
         "google/siglip2-giant-opt-patch16-384",
     ),
+}
+
+TIMM_MODEL_SPECS = {
+    "megadescriptor-t-224": "hf-hub:BVRA/MegaDescriptor-T-224",
+    "megadescriptor-b-224": "hf-hub:BVRA/MegaDescriptor-B-224",
+    "megadescriptor-l-384": "hf-hub:BVRA/MegaDescriptor-L-384",
 }
 
 ZERO_SHOT_MODEL_SPECS = {
@@ -347,11 +358,36 @@ class HuggingFaceEmbedder(Embedder):
             images = [Image.open(path).convert("RGB") for path in paths[start : start + batch_size]]
             inputs = self.processor(images=images, return_tensors="pt").to(self.device)
             with self.torch.inference_mode():
-                if self.family in {"clip", "siglip"} and hasattr(self.model, "get_image_features"):
+                if hasattr(self.model, "get_image_features"):
                     features = self.model.get_image_features(**inputs)
                 else:
                     output = self.model(**inputs)
                     features = output.last_hidden_state[:, 0, :]
+                features = self.torch.nn.functional.normalize(features.float(), dim=1)
+            batches.append(features.cpu().numpy())
+            print(f"  {min(start + batch_size, len(paths))}/{len(paths)}", flush=True)
+        return np.concatenate(batches).astype(np.float32)
+
+
+class TimmEmbedder(Embedder):
+    def __init__(self, name: str, repo: str, device: str) -> None:
+        import timm
+        import torch
+        from timm.data import create_transform, resolve_model_data_config
+
+        self.name = name
+        self.torch = torch
+        self.device = device
+        self.model = timm.create_model(repo, pretrained=True, num_classes=0).to(device).eval()
+        self.transform = create_transform(**resolve_model_data_config(self.model), is_training=False)
+
+    def encode(self, paths: Sequence[Path], batch_size: int) -> np.ndarray:
+        batches: list[np.ndarray] = []
+        for start in range(0, len(paths), batch_size):
+            images = [self.transform(Image.open(path).convert("RGB")) for path in paths[start : start + batch_size]]
+            inputs = self.torch.stack(images).to(self.device)
+            with self.torch.inference_mode():
+                features = self.model(inputs)
                 features = self.torch.nn.functional.normalize(features.float(), dim=1)
             batches.append(features.cpu().numpy())
             print(f"  {min(start + batch_size, len(paths))}/{len(paths)}", flush=True)
@@ -399,8 +435,11 @@ def build_embedder(name: str, args: argparse.Namespace) -> Embedder:
         if not args.current_onnx:
             raise ValueError("--current-onnx or --current-embeddings is required for the current model")
         return CurrentOnnxEmbedder(Path(args.current_onnx), args.device)
+    if name in TIMM_MODEL_SPECS:
+        return TimmEmbedder(name, TIMM_MODEL_SPECS[name], args.device)
     if name not in MODEL_SPECS:
-        raise ValueError(f"Unknown model {name!r}. Choose from current,{','.join(MODEL_SPECS)}")
+        choices = ",".join(["current", *MODEL_SPECS, *TIMM_MODEL_SPECS])
+        raise ValueError(f"Unknown model {name!r}. Choose from {choices}")
     repo, family, base_repo = MODEL_SPECS[name]
     return HuggingFaceEmbedder(name, repo, family, base_repo, args.device)
 

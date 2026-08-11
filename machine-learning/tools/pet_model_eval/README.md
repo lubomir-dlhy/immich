@@ -58,10 +58,12 @@ docker run --rm --gpus all \
 
 Available Hugging Face models:
 
+- `avito-clip-base` — 512 dimensions; matches the current Immich animal-ID model family.
 - `avito-dinov2-small` — 384 dimensions, fast baseline.
 - `avito-zer0int-clip-l` — 768 dimensions, best practical published result.
 - `avito-siglip2-base` — 768 dimensions.
 - `avito-siglip2-giant` — 1536 dimensions, accuracy-first and expensive.
+- `megadescriptor-t-224`, `megadescriptor-b-224`, and `megadescriptor-l-384` — general animal re-identification baselines.
 
 To evaluate the current Immich ONNX model too, run the evaluator in an
 environment that already has a compatible ONNX Runtime build, mount the model,
