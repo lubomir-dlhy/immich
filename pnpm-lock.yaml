@@ -119,7 +119,7 @@ importers:
         version: link:../packages/e2e-auth-server
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../packages/sdk
       '@playwright/test':
         specifier: ^1.44.1
         version: 1.61.1
@@ -225,7 +225,7 @@ importers:
         version: 10.0.1(eslint@10.7.0(jiti@2.7.0))
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       '@types/byte-size':
         specifier: ^8.1.0
         version: 8.1.2
@@ -324,10 +324,10 @@ importers:
         version: 1.1.1
       '@immich/plugin-sdk':
         specifier: workspace:*
-        version: file:packages/plugin-sdk(@extism/js-pdk@1.1.1)
+        version: link:../plugin-sdk
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       esbuild:
         specifier: ^0.28.0
         version: 0.28.1
@@ -346,7 +346,7 @@ importers:
         version: 1.1.1
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
@@ -402,7 +402,7 @@ importers:
         version: 2.0.0-rc13
       '@immich/plugin-sdk':
         specifier: workspace:*
-        version: file:packages/plugin-sdk(@extism/js-pdk@1.1.1)
+        version: link:../packages/plugin-sdk
       '@immich/sql-tools':
         specifier: ^0.5.1
         version: 0.5.2
@@ -536,8 +536,8 @@ importers:
         specifier: ^6.0.0
         version: 6.2.3
       js-yaml:
-        specifier: ^4.1.0
-        version: 4.3.0
+        specifier: ^4.3.1
+        version: 4.3.1
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3
@@ -796,7 +796,7 @@ importers:
         version: 0.4.3
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../packages/sdk
       '@immich/ui':
         specifier: ^0.83.0
         version: 0.83.0(@sveltejs/kit@2.69.3(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.5(@typescript-eslint/types@8.64.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0)))(@typescript/typescript6@6.0.2)(svelte@5.56.5(@typescript-eslint/types@8.64.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0)))(svelte@5.56.5(@typescript-eslint/types@8.64.0))
@@ -3117,15 +3117,6 @@ packages:
 
   '@immich/justified-layout-wasm@0.4.3':
     resolution: {integrity: sha512-fpcQ7zPhP3Cp1bEXhONVYSUeIANa2uzaQFGKufUZQo5FO7aFT77szTVChhlCy4XaVy5R4ZvgSkA/1TJmeORz7Q==}
-
-  '@immich/plugin-sdk@file:packages/plugin-sdk':
-    resolution: {directory: packages/plugin-sdk, type: directory}
-    hasBin: true
-    peerDependencies:
-      '@extism/js-pdk': ^1.1.1
-
-  '@immich/sdk@file:packages/sdk':
-    resolution: {directory: packages/sdk, type: directory}
 
   '@immich/sql-tools@0.5.2':
     resolution: {integrity: sha512-O1SJ+BbeFVsUTF4af1MfagJZM+lPgLjI8lQ3SZNjpo8SGJReSbUl2ii03OKuGni/G0yp2GnRLpOTNSHYGtVrcg==}
@@ -6826,6 +6817,7 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+    deprecated: v4 is no longer maintained, upgrade to v5
 
   cron@4.4.0:
     resolution: {integrity: sha512-fkdfq+b+AHI4cKdhZlppHveI/mgz2qpiYxcm+t5E5TsxX7QrLS1VE0+7GENEk9z0EeGPcpSciGv6ez24duWhwQ==}
@@ -8815,6 +8807,10 @@ packages:
 
   js-yaml@4.3.0:
     resolution: {integrity: sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==}
+    hasBin: true
+
+  js-yaml@4.3.1:
+    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
     hasBin: true
 
   jsdom@26.1.0:
@@ -13075,7 +13071,7 @@ snapshots:
 
   '@11ty/gray-matter@1.0.0':
     dependencies:
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
@@ -14778,7 +14774,7 @@ snapshots:
       '@types/react-router-config': 5.0.11
       combine-promises: 1.2.0
       fs-extra: 11.3.6
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       lodash: 4.18.1
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -15421,7 +15417,7 @@ snapshots:
       '@docusaurus/utils-common': 3.10.2(postcss@8.5.19)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       fs-extra: 11.3.6
       joi: 17.13.4
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       lodash: 4.18.1
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -15455,7 +15451,7 @@ snapshots:
       github-slugger: 1.5.0
       globby: 11.1.0
       jiti: 1.21.7
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       lodash: 4.18.1
       micromatch: 4.0.8
       p-queue: 6.6.2
@@ -15496,7 +15492,7 @@ snapshots:
       github-slugger: 1.5.0
       globby: 11.1.0
       jiti: 1.21.7
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       lodash: 4.18.1
       micromatch: 4.0.8
       p-queue: 6.6.2
@@ -16024,15 +16020,6 @@ snapshots:
     optional: true
 
   '@immich/justified-layout-wasm@0.4.3': {}
-
-  '@immich/plugin-sdk@file:packages/plugin-sdk(@extism/js-pdk@1.1.1)':
-    dependencies:
-      '@extism/js-pdk': 1.1.1
-      commander: 15.0.0
-
-  '@immich/sdk@file:packages/sdk':
-    dependencies:
-      '@oazapfts/runtime': 1.2.0
 
   '@immich/sql-tools@0.5.2':
     dependencies:
@@ -19856,7 +19843,7 @@ snapshots:
   cosmiconfig@8.3.6(@typescript/typescript6@6.0.2):
     dependencies:
       import-fresh: 3.3.1
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       parse-json: 5.2.0
       path-type: 4.0.0
     optionalDependencies:
@@ -19865,7 +19852,7 @@ snapshots:
   cosmiconfig@8.3.6(typescript@5.9.3):
     dependencies:
       import-fresh: 3.3.1
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       parse-json: 5.2.0
       path-type: 4.0.0
     optionalDependencies:
@@ -22221,6 +22208,10 @@ snapshots:
   js-tokens@9.0.1: {}
 
   js-yaml@4.3.0:
+    dependencies:
+      argparse: 2.0.1
+
+  js-yaml@4.3.1:
     dependencies:
       argparse: 2.0.1
 
