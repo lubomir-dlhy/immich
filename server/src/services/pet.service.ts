@@ -29,6 +29,7 @@ import { isPetRecognitionEnabled } from 'src/utils/misc';
 
 const PET_VIDEO_FRAME_INTERVAL_MS = 5000;
 const PET_VIDEO_MAX_FRAMES = 120;
+const PET_VIDEO_END_GUARD_MS = 500;
 // Temporal matching is deliberately looser than global identity clustering:
 // consecutive frames already provide a strong time constraint, while pose and
 // motion blur can move AnimalID embeddings substantially within one video.
@@ -146,7 +147,9 @@ const getPetVideoFrameTimes = (durationMs: number | null): number[] => {
   }
 
   const intervalMs = Math.max(PET_VIDEO_FRAME_INTERVAL_MS, Math.ceil(durationMs / PET_VIDEO_MAX_FRAMES / 1000) * 1000);
-  return Array.from({ length: Math.ceil(durationMs / intervalMs) }, (_, index) => index * intervalMs);
+  return Array.from({ length: Math.ceil(durationMs / intervalMs) }, (_, index) => index * intervalMs).filter(
+    (timestampMs) => timestampMs === 0 || timestampMs <= durationMs - PET_VIDEO_END_GUARD_MS,
+  );
 };
 
 @Injectable()
@@ -788,7 +791,18 @@ export class PetService extends BaseService {
       if (asset.type === AssetType.Video) {
         const frameTimes = getPetVideoFrameTimes(asset.duration);
         for (const [frameIndex, frameTimestampMs] of frameTimes.entries()) {
-          const frame = await this.mediaRepository.extractVideoFrame(asset.originalPath, frameTimestampMs);
+          let frame: Buffer;
+          try {
+            frame = await this.mediaRepository.extractVideoFrame(asset.originalPath, frameTimestampMs);
+          } catch (error) {
+            if (frameIndex === 0) {
+              throw error;
+            }
+            this.logger.warn(
+              `Could not extract video frame at ${frameTimestampMs}ms for asset ${id}; processing the frames extracted so far`,
+            );
+            break;
+          }
           const nextTimestampMs = frameTimes[frameIndex + 1] ?? asset.duration;
           const frameDurationMs = nextTimestampMs == null ? null : Math.max(1, nextTimestampMs - frameTimestampMs);
           await processFrame(frame, frameTimestampMs, frameDurationMs);

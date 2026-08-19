@@ -531,6 +531,54 @@ describe(PetService.name, () => {
     ]);
   });
 
+  it('does not request a video frame too close to the reported duration', async () => {
+    const assetId = sighting.assetId;
+    mocks.pet.getAssetForDetection.mockResolvedValue({
+      id: assetId,
+      ownerId: sighting.asset.ownerId,
+      visibility: AssetVisibility.Timeline,
+      fileCreatedAt: new Date(),
+      type: AssetType.Video,
+      originalPath: '/videos/dogs.mp4',
+      duration: 10_010,
+      files: [{ path: '/preview/dogs.jpg' }],
+      pets: [],
+    } as never);
+    mocks.media.extractVideoFrame.mockResolvedValue(Buffer.from('frame'));
+    mocks.machineLearning.detectPets.mockResolvedValue({ imageWidth: 1000, imageHeight: 800, pets: [] });
+
+    await expect(sut.handleDetectPets({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.media.extractVideoFrame).toHaveBeenCalledTimes(2);
+    expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(1, '/videos/dogs.mp4', 0);
+    expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(2, '/videos/dogs.mp4', 5000);
+  });
+
+  it('keeps detections from earlier frames when a later video frame cannot be extracted', async () => {
+    const assetId = sighting.assetId;
+    mocks.pet.getAssetForDetection.mockResolvedValue({
+      id: assetId,
+      ownerId: sighting.asset.ownerId,
+      visibility: AssetVisibility.Timeline,
+      fileCreatedAt: new Date(),
+      type: AssetType.Video,
+      originalPath: '/videos/dogs.mp4',
+      duration: 12_000,
+      files: [{ path: '/preview/dogs.jpg' }],
+      pets: [],
+    } as never);
+    mocks.media.extractVideoFrame
+      .mockResolvedValueOnce(Buffer.from('first'))
+      .mockResolvedValueOnce(Buffer.from('middle'))
+      .mockRejectedValueOnce(new Error('frame is past the decodable stream'));
+    mocks.machineLearning.detectPets.mockResolvedValue({ imageWidth: 1000, imageHeight: 800, pets: [] });
+
+    await expect(sut.handleDetectPets({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.media.extractVideoFrame).toHaveBeenCalledTimes(3);
+    expect(mocks.asset.upsertJobStatus).toHaveBeenCalledWith({ assetId, petsRecognizedAt: expect.any(Date) });
+  });
+
   it('does not recreate a rejected detection when pet detection is rerun', async () => {
     const assetId = sighting.assetId;
     const rejected = {
