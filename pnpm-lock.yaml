@@ -119,7 +119,7 @@ importers:
         version: link:../packages/e2e-auth-server
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../packages/sdk
       '@playwright/test':
         specifier: ^1.44.1
         version: 1.61.1
@@ -225,7 +225,7 @@ importers:
         version: 10.0.1(eslint@10.7.0(jiti@2.7.0))
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       '@types/byte-size':
         specifier: ^8.1.0
         version: 8.1.2
@@ -324,10 +324,10 @@ importers:
         version: 1.1.1
       '@immich/plugin-sdk':
         specifier: workspace:*
-        version: file:packages/plugin-sdk(@extism/js-pdk@1.1.1)
+        version: link:../plugin-sdk
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       esbuild:
         specifier: ^0.28.0
         version: 0.28.1
@@ -346,7 +346,7 @@ importers:
         version: 1.1.1
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
@@ -402,7 +402,7 @@ importers:
         version: 2.0.0-rc13
       '@immich/plugin-sdk':
         specifier: workspace:*
-        version: file:packages/plugin-sdk(@extism/js-pdk@1.1.1)
+        version: link:../packages/plugin-sdk
       '@immich/sql-tools':
         specifier: ^0.5.1
         version: 0.5.2
@@ -796,7 +796,7 @@ importers:
         version: 0.4.3
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../packages/sdk
       '@immich/ui':
         specifier: ^0.83.0
         version: 0.83.0(@sveltejs/kit@2.69.3(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.5(@typescript-eslint/types@8.64.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0)))(@typescript/typescript6@6.0.2)(svelte@5.56.5(@typescript-eslint/types@8.64.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0)))(svelte@5.56.5(@typescript-eslint/types@8.64.0))
@@ -2354,6 +2354,9 @@ packages:
   '@emnapi/runtime@1.11.1':
     resolution: {integrity: sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw==}
 
+  '@emnapi/runtime@1.11.3':
+    resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
+
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
 
@@ -3117,15 +3120,6 @@ packages:
 
   '@immich/justified-layout-wasm@0.4.3':
     resolution: {integrity: sha512-fpcQ7zPhP3Cp1bEXhONVYSUeIANa2uzaQFGKufUZQo5FO7aFT77szTVChhlCy4XaVy5R4ZvgSkA/1TJmeORz7Q==}
-
-  '@immich/plugin-sdk@file:packages/plugin-sdk':
-    resolution: {directory: packages/plugin-sdk, type: directory}
-    hasBin: true
-    peerDependencies:
-      '@extism/js-pdk': ^1.1.1
-
-  '@immich/sdk@file:packages/sdk':
-    resolution: {directory: packages/sdk, type: directory}
 
   '@immich/sql-tools@0.5.2':
     resolution: {integrity: sha512-O1SJ+BbeFVsUTF4af1MfagJZM+lPgLjI8lQ3SZNjpo8SGJReSbUl2ii03OKuGni/G0yp2GnRLpOTNSHYGtVrcg==}
@@ -6826,6 +6820,7 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+    deprecated: v4 is no longer maintained, upgrade to v5
 
   cron@4.4.0:
     resolution: {integrity: sha512-fkdfq+b+AHI4cKdhZlppHveI/mgz2qpiYxcm+t5E5TsxX7QrLS1VE0+7GENEk9z0EeGPcpSciGv6ez24duWhwQ==}
@@ -9881,6 +9876,10 @@ packages:
     resolution: {integrity: sha512-c5Ko1fZJIJmzhFIkhRN76WTq+fC6tWnGy9CXA0fA+XygsWZmEwG8vmbkNqxMyoaa0Tin4djul49NzdVcJJcjeA==}
     engines: {node: ^18 || ^20 || >= 21}
 
+  node-addon-api@8.9.2:
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
+    engines: {node: ^18 || ^20 || >= 21}
+
   node-emoji@1.11.0:
     resolution: {integrity: sha512-wo2DpQkQp7Sjm2A0cq+sN7EHKO6Sl0ctXeBdFZrL9T9+UywORbufTcTZxom8YqpLQt/FqNMUkOpkZrJVYSKD3A==}
 
@@ -9907,6 +9906,11 @@ packages:
 
   node-gyp@13.0.0:
     resolution: {integrity: sha512-FYYyBDWdc+kzoyPd5PqHUgM9DGs1C/Z4jxBZAOnA2GRUVXPivKRREq5q+VVPXVr9aGVqGMaMqyFHbviy/yb7Hg==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
+    hasBin: true
+
+  node-gyp@13.0.2:
+    resolution: {integrity: sha512-SXTvw3PxznpowYhJSOD9mVQBgDaCTWXffX+wQZsQ7PbcTV86TsXCUcSZhHnskFQvrvn/OdSzJPMsptT2pIj9ww==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
     hasBin: true
 
@@ -11992,6 +11996,10 @@ packages:
     resolution: {integrity: sha512-56adEpPMouktRlBLXiaYFFzZ/3+JXa8P9n7WbR+ibIjtviN55mEaOkiysCnPnWm+7kkui1Dn8J9l+g6zV8731w==}
     engines: {node: '>=18'}
 
+  tar@7.5.22:
+    resolution: {integrity: sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==}
+    engines: {node: '>=18'}
+
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
 
@@ -12351,6 +12359,10 @@ packages:
   undici@6.26.0:
     resolution: {integrity: sha512-4yqz8a3n5HmGTlsbADNtr/dJlhkh/55Rq798G6ibiULcXbDtaLpTl1pvdqcbFfeoj3iSi52lePFM7h9H21cw/A==}
     engines: {node: '>=18.17'}
+
+  undici@8.10.2:
+    resolution: {integrity: sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ==}
+    engines: {node: '>=22.19.0'}
 
   undici@8.7.0:
     resolution: {integrity: sha512-N7iQtfyLhIMOFgQubvmLV26svHpO0bqKnAiWotTQCVKCmWrcGbBotPuW1x+xwYZ2VHdSTVUfPQQnlEt1/LouTQ==}
@@ -15535,6 +15547,11 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@emnapi/runtime@1.11.3':
+    dependencies:
+      tslib: 2.8.1
+    optional: true
+
   '@emnapi/wasi-threads@1.2.2':
     dependencies:
       tslib: 2.8.1
@@ -16011,7 +16028,7 @@ snapshots:
 
   '@img/sharp-wasm32@0.34.5':
     dependencies:
-      '@emnapi/runtime': 1.11.1
+      '@emnapi/runtime': 1.11.3
     optional: true
 
   '@img/sharp-win32-arm64@0.34.5':
@@ -16024,15 +16041,6 @@ snapshots:
     optional: true
 
   '@immich/justified-layout-wasm@0.4.3': {}
-
-  '@immich/plugin-sdk@file:packages/plugin-sdk(@extism/js-pdk@1.1.1)':
-    dependencies:
-      '@extism/js-pdk': 1.1.1
-      commander: 15.0.0
-
-  '@immich/sdk@file:packages/sdk':
-    dependencies:
-      '@oazapfts/runtime': 1.2.0
 
   '@immich/sql-tools@0.5.2':
     dependencies:
@@ -23507,6 +23515,8 @@ snapshots:
 
   node-addon-api@8.8.0: {}
 
+  node-addon-api@8.9.2: {}
+
   node-emoji@1.11.0:
     dependencies:
       lodash: 4.18.1
@@ -23540,6 +23550,19 @@ snapshots:
       tar: 7.5.16
       tinyglobby: 0.2.17
       undici: 6.26.0
+      which: 7.0.0
+
+  node-gyp@13.0.2:
+    dependencies:
+      env-paths: 2.2.1
+      exponential-backoff: 3.1.3
+      graceful-fs: 4.2.11
+      nopt: 10.0.1
+      proc-log: 7.0.0
+      semver: 7.8.5
+      tar: 7.5.22
+      tinyglobby: 0.2.17
+      undici: 8.10.2
       which: 7.0.0
 
   node-releases@2.0.51: {}
@@ -25353,8 +25376,8 @@ snapshots:
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
-      node-addon-api: 8.8.0
-      node-gyp: 13.0.0
+      node-addon-api: 8.9.2
+      node-gyp: 13.0.2
       semver: 7.8.5
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
@@ -26027,6 +26050,14 @@ snapshots:
       minizlib: 3.1.0
       yallist: 5.0.0
 
+  tar@7.5.22:
+    dependencies:
+      '@isaacs/fs-minipass': 4.0.1
+      chownr: 3.0.0
+      minipass: 7.1.3
+      minizlib: 3.1.0
+      yallist: 5.0.0
+
   teex@1.0.1:
     dependencies:
       streamx: 2.28.0
@@ -26370,6 +26401,8 @@ snapshots:
   undici-types@7.18.2: {}
 
   undici@6.26.0: {}
+
+  undici@8.10.2: {}
 
   undici@8.7.0: {}
 
