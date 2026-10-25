@@ -93,7 +93,7 @@
 1785600001000-MinFacePreferenceMigration
 1785600002000-ConvertUserPasswordEmptyStringToNull
 1785600003000-AlbumDescriptionNullable
-1785600004000-DropAssetFacePersonTable
+1785600004000-PreserveForkSharedFaceLinks
 1786385711807-AlbumOwnerDeleteTrigger
 1786741078327-AddWorkflowLogsTable
 1786972746371-AssetOcrUpdatedAtTrigger
@@ -105,3 +105,4 @@
 1790616293884-PersonSharing
 1790693088454-AddPersonUserTableSharedBySharedWithConstraint
 1792213725597-AddAssetFaceAssetState
+1792300000000-ConvertForkSharedFaceLinks
