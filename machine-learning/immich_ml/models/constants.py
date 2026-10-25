@@ -86,6 +86,9 @@ _PADDLE_MODELS = {
     "KOREAN__PP-OCRv5_mobile",
     "LATIN__PP-OCRv5_mobile",
     "TH__PP-OCRv5_mobile",
+    "PP-OCRv6_tiny",
+    "PP-OCRv6_small",
+    "PP-OCRv6_medium",
 }
 
 _YOLOX_MODELS = {"yolox_s", "yolox_m", "yolox_x"}
@@ -93,6 +96,7 @@ _D_FINE_MODELS = {"dfine_l_coco"}
 _ANIMAL_ID_MODELS = {"AnimalID-CLIP-ViT-B-32"}
 
 SUPPORTED_PROVIDERS = [
+    "nv_tensorrt_rtx",
     "CUDAExecutionProvider",
     "MIGraphXExecutionProvider",
     "OpenVINOExecutionProvider",

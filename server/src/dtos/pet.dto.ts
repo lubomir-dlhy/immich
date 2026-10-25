@@ -17,7 +17,7 @@ export const PetResponseSchema = z
     boundingBoxY1: z.int().optional(),
     boundingBoxX2: z.int().optional(),
     boundingBoxY2: z.int().optional(),
-    assetCount: z.coerce.number().optional(),
+    assetCount: z.coerce.number().int().optional(),
   })
   .meta({ id: 'PetResponseDto' });
 
@@ -26,15 +26,15 @@ export class PetResponseDto extends createZodDto(PetResponseSchema) {}
 export const PetClusterNeighborSchema = z
   .object({
     petId: z.uuidv4(),
-    distance: z.number(),
+    distance: z.number().meta({ format: 'double' }),
   })
   .meta({ id: 'PetClusterNeighborDto' });
 
 export const PetClusterPointSchema = PetResponseSchema.extend({
-  x: z.number(),
-  y: z.number(),
+  x: z.number().meta({ format: 'double' }),
+  y: z.number().meta({ format: 'double' }),
   nearestPetId: z.uuidv4().nullable(),
-  nearestDistance: z.number().nullable(),
+  nearestDistance: z.number().nullable().meta({ format: 'double' }),
   neighbors: z.array(PetClusterNeighborSchema),
 }).meta({ id: 'PetClusterPointDto' });
 
@@ -43,7 +43,7 @@ export class PetClusterPointDto extends createZodDto(PetClusterPointSchema) {}
 export const PetClusterResponseSchema = z
   .object({
     points: z.array(PetClusterPointSchema),
-    recognitionThreshold: z.number(),
+    recognitionThreshold: z.number().meta({ format: 'double' }),
   })
   .meta({ id: 'PetClusterResponseDto' });
 
@@ -59,7 +59,7 @@ export const AssetPetResponseSchema = z
     boundingBoxY1: z.int(),
     boundingBoxX2: z.int(),
     boundingBoxY2: z.int(),
-    detectionScore: z.number(),
+    detectionScore: z.number().meta({ format: 'double' }),
     species: z.string(),
     trackId: z.uuidv4(),
     frameTimestampMs: z.int(),
@@ -138,25 +138,25 @@ const PetTrackSelectorSchema = z.object({
 
 const PetTrackAssignmentTargetSchema = z.discriminatedUnion('type', [
   z.object({
-    type: z.literal('existing'),
+    type: z.literal('existing').meta({ id: 'PetTrackTargetExisting' }),
     petId: z.uuidv4(),
   }),
   z.object({
-    type: z.literal('new'),
+    type: z.literal('new').meta({ id: 'PetTrackTargetNew' }),
     species: z.enum(['cat', 'dog']),
     name: z.string().trim().max(100).optional(),
   }),
   z.object({
-    type: z.literal('unassigned'),
+    type: z.literal('unassigned').meta({ id: 'PetTrackTargetUnassigned' }),
   }),
   z.object({
-    type: z.literal('rejected'),
+    type: z.literal('rejected').meta({ id: 'PetTrackTargetRejected' }),
   }),
   z.object({
-    type: z.literal('restore'),
+    type: z.literal('restore').meta({ id: 'PetTrackTargetRestore' }),
   }),
   z.object({
-    type: z.literal('species'),
+    type: z.literal('species').meta({ id: 'PetTrackTargetSpecies' }),
     species: z.enum(['cat', 'dog']),
   }),
 ]);
@@ -173,7 +173,7 @@ export class PetTrackAssignmentDto extends createZodDto(PetTrackAssignmentSchema
 export const PetSuggestionSchema = z
   .object({
     pet: PetResponseSchema,
-    distance: z.number(),
+    distance: z.number().meta({ format: 'double' }),
   })
   .meta({ id: 'PetSuggestionDto' });
 

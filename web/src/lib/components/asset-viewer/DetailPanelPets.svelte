@@ -21,6 +21,9 @@
     type AssetPetResponseDto,
     type AssetResponseDto,
     unassignAssetPet,
+    PetTrackTargetRejected,
+    PetTrackTargetRestore,
+    PetTrackTargetSpecies,
   } from '@immich/sdk';
   import { Icon, IconButton, LoadingSpinner, modalManager, Text, toastManager } from '@immich/ui';
   import {
@@ -201,7 +204,7 @@
       await assignTracks({
         petTrackAssignmentDto: {
           selectors: [{ assetId: asset.id, trackId: sighting.trackId }],
-          target: { type: 'species', species },
+          target: { type: PetTrackTargetSpecies.Species, species },
         },
       });
       assetViewerManager.clearHighlightedFaces();
@@ -222,7 +225,7 @@
     const sighting = getSummarySighting(summary);
     const selectors = [{ assetId: asset.id, trackId: sighting.trackId }];
     try {
-      await assignTracks({ petTrackAssignmentDto: { selectors, target: { type: 'rejected' } } });
+      await assignTracks({ petTrackAssignmentDto: { selectors, target: { type: PetTrackTargetRejected.Rejected } } });
       petManager.invalidate();
       await petManager.getAssetPets(asset.id);
       toastManager.primary({
@@ -231,7 +234,9 @@
           label: $t('undo'),
           onclick: async () => {
             try {
-              await assignTracks({ petTrackAssignmentDto: { selectors, target: { type: 'restore' } } });
+              await assignTracks({
+                petTrackAssignmentDto: { selectors, target: { type: PetTrackTargetRestore.Restore } },
+              });
               petManager.invalidate();
               await petManager.getAssetPets(asset.id);
             } catch (error) {
@@ -342,14 +347,16 @@
     try {
       if (isOwner) {
         const selectors = [{ assetId: asset.id, trackId: sighting.trackId }];
-        await assignTracks({ petTrackAssignmentDto: { selectors, target: { type: 'rejected' } } });
+        await assignTracks({ petTrackAssignmentDto: { selectors, target: { type: PetTrackTargetRejected.Rejected } } });
         toastManager.primary({
           description: $t('pet_track_removed'),
           button: {
             label: $t('undo'),
             onclick: async () => {
               try {
-                await assignTracks({ petTrackAssignmentDto: { selectors, target: { type: 'restore' } } });
+                await assignTracks({
+                  petTrackAssignmentDto: { selectors, target: { type: PetTrackTargetRestore.Restore } },
+                });
                 petManager.invalidate();
                 await petManager.getAssetPets(asset.id);
               } catch (error) {

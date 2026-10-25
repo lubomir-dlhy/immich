@@ -1,13 +1,15 @@
 import { Selectable, ShallowDehydrateObject } from 'kysely';
 import { createZodDto } from 'nestjs-zod';
-import { AssetFace, AssetFile, Exif, Stack, Tag, User } from 'src/database';
-import { HistoryBuilder } from 'src/decorators';
-import { AuthDto } from 'src/dtos/auth.dto';
-import { AssetEditActionItem } from 'src/dtos/editing.dto';
-import { ExifResponseSchema, mapExif } from 'src/dtos/exif.dto';
-import { PersonResponseDto, PersonResponseSchema, mapPerson } from 'src/dtos/person.dto';
-import { TagResponseSchema, mapTag } from 'src/dtos/tag.dto';
-import { UserResponseSchema, mapUser } from 'src/dtos/user.dto';
+import z from 'zod';
+import type { MaybeDehydrated } from 'src/types.js';
+import { AssetFace, AssetFile, Exif, Stack, Tag, User } from 'src/database.js';
+import { HistoryBuilder } from 'src/decorators.js';
+import { AuthDto } from 'src/dtos/auth.dto.js';
+import { AssetEditActionItem } from 'src/dtos/editing.dto.js';
+import { ExifResponseSchema, mapExif } from 'src/dtos/exif.dto.js';
+import { PersonResponseDto, PersonResponseSchema, mapPerson } from 'src/dtos/person.dto.js';
+import { TagResponseSchema, mapTag } from 'src/dtos/tag.dto.js';
+import { UserResponseSchema, mapUser } from 'src/dtos/user.dto.js';
 import {
   AssetStatus,
   AssetType,
@@ -15,12 +17,10 @@ import {
   AssetVisibility,
   AssetVisibilitySchema,
   ChecksumAlgorithm,
-} from 'src/enum';
-import { MaybeDehydrated } from 'src/types';
-import { hexOrBufferToBase64 } from 'src/utils/bytes';
-import { asDateTimeString } from 'src/utils/date';
-import { mimeTypes } from 'src/utils/mime-types';
-import z from 'zod';
+} from 'src/enum.js';
+import { hexOrBufferToBase64 } from 'src/utils/bytes.js';
+import { asDateTimeString } from 'src/utils/date.js';
+import { mimeTypes } from 'src/utils/mime-types.js';
 
 const SanitizedAssetResponseSchema = z
   .object({
@@ -162,7 +162,7 @@ export type AssetMapOptions = {
   auth?: AuthDto;
 };
 
-const peopleFromFaces = (faces?: MaybeDehydrated<AssetFace>[], auth?: AuthDto): PersonResponseDto[] => {
+const peopleFromFaces = (faces?: MaybeDehydrated<AssetFace>[]): PersonResponseDto[] => {
   if (!faces) {
     return [];
   }
@@ -170,17 +170,8 @@ const peopleFromFaces = (faces?: MaybeDehydrated<AssetFace>[], auth?: AuthDto): 
   const peopleMap: Map<string, PersonResponseDto> = new Map();
 
   for (const face of faces) {
-    // When the viewer (auth) is known, only expose people they own — their own
-    // recognitions (owner column for their assets, or the per-viewer
-    // asset_face_person links on shared assets), never another user's people.
-    // Without auth there is no viewer context, so keep the base behavior.
-    if (face.person && (!auth || face.person.ownerId === auth.user.id)) {
-      peopleMap.set(face.person.id, mapPerson(face.person));
-    }
-    for (const person of face.people ?? []) {
-      if (person && person.ownerId === auth?.user.id) {
-        peopleMap.set(person.id, mapPerson(person));
-      }
+    if (face.person && !peopleMap.has(face.person.personGroupId)) {
+      peopleMap.set(face.person.personGroupId, mapPerson(face.person));
     }
   }
 
@@ -241,7 +232,7 @@ export function mapAsset(entity: MaybeDehydrated<MapAsset>, options: AssetMapOpt
     exifInfo: entity.exifInfo ? mapExif(entity.exifInfo) : undefined,
     livePhotoVideoId: entity.livePhotoVideoId,
     tags: entity.tags?.map((tag) => mapTag(tag)),
-    people: peopleFromFaces(entity.faces, options.auth),
+    people: peopleFromFaces(entity.faces),
     checksum: hexOrBufferToBase64(entity.checksum)!,
     stack: withStack ? mapStack(entity) : undefined,
     isOffline: entity.isOffline,

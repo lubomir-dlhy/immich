@@ -1,5 +1,5 @@
 import { Column, ForeignKeyColumn, Index, Table } from '@immich/sql-tools';
-import { AssetPetTable } from 'src/schema/tables/asset-pet.table';
+import { AssetPetTable } from 'src/schema/tables/asset-pet.table.js';
 
 @Table({ name: 'pet_search' })
 @Index({

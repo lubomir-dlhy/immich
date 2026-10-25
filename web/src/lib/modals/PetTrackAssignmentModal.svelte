@@ -14,6 +14,11 @@
     type PetResponseDto,
     type PetSuggestionDto,
     type PetTrackAssignmentDto,
+    PetTrackTargetExisting,
+    PetTrackTargetNew,
+    PetTrackTargetRejected,
+    PetTrackTargetRestore,
+    PetTrackTargetUnassigned,
   } from '@immich/sdk';
   import { Button, Input, LoadingSpinner, Modal, ModalBody, toastManager } from '@immich/ui';
   import { onMount } from 'svelte';
@@ -83,11 +88,11 @@
     saving = true;
     const selectors = selectedTrackIds.map((trackId) => ({ assetId, trackId }));
     const previousTarget: PetTrackAssignmentDto['target'] =
-      target.type === 'rejected'
-        ? { type: 'restore' }
+      target.type === PetTrackTargetRejected.Rejected
+        ? { type: PetTrackTargetRestore.Restore }
         : currentPet
-          ? { type: 'existing', petId: currentPet.id }
-          : { type: 'unassigned' };
+          ? { type: PetTrackTargetExisting.Existing, petId: currentPet.id }
+          : { type: PetTrackTargetUnassigned.Unassigned };
 
     try {
       await assignTracks({ petTrackAssignmentDto: { selectors, target } });
@@ -116,10 +121,14 @@
     }
   };
 
-  const assignPet = (pet: PetResponseDto) => applyTarget({ type: 'existing', petId: pet.id }, $t('pet_track_updated'));
+  const assignPet = (pet: PetResponseDto) =>
+    applyTarget({ type: PetTrackTargetExisting.Existing, petId: pet.id }, $t('pet_track_updated'));
 
   const createPet = () =>
-    applyTarget({ type: 'new', species: newSpecies, name: newName.trim() || undefined }, $t('pet_track_updated'));
+    applyTarget(
+      { type: PetTrackTargetNew.New, species: newSpecies, name: newName.trim() || undefined },
+      $t('pet_track_updated'),
+    );
 </script>
 
 <Modal title={currentPet ? $t('change_pet') : $t('identify_pet')} size="small" {onClose}>
@@ -263,7 +272,7 @@
             fullWidth
             color="danger"
             variant="outline"
-            onclick={() => applyTarget({ type: 'rejected' }, $t('pet_track_removed'))}
+            onclick={() => applyTarget({ type: PetTrackTargetRejected.Rejected }, $t('pet_track_removed'))}
             disabled={saving}
           >
             {$t('not_a_pet')}

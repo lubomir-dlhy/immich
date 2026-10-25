@@ -1,4 +1,4 @@
-import { createPostgres, DatabaseConnectionParams } from '@immich/sql-tools';
+import { DatabaseConnectionParams, createPostgres } from '@immich/sql-tools';
 import {
   AliasedRawBuilder,
   DeduplicateJoinsPlugin,
@@ -9,18 +9,20 @@ import {
   NotNull,
   OperandValueExpression,
   ReferenceExpression,
-  Selectable,
   SelectQueryBuilder,
+  Selectable,
   ShallowDehydrateObject,
-  sql,
   SqlBool,
+  expressionBuilder,
+  sql,
 } from 'kysely';
-import { PostgresJSDialect } from 'kysely-postgres-js';
 import { jsonArrayFrom, jsonObjectFrom } from 'kysely/helpers/postgres';
+import { PostgresJSDialect } from 'kysely-postgres-js';
 import { Notice, PostgresError } from 'postgres';
-import { columns, lockableProperties, LockableProperty, Person } from 'src/database';
-import { DummyValue, GenerateSqlQueries } from 'src/decorators';
-import { AssetEditActionItem } from 'src/dtos/editing.dto';
+import type { AudioStreamInfo, VectorExtension, VideoFormat, VideoPacketInfo, VideoStreamInfo } from 'src/types.js';
+import { LockableProperty, Person, columns, lockableProperties } from 'src/database.js';
+import { DummyValue, GenerateSqlQueries } from 'src/decorators.js';
+import { AssetEditActionItem } from 'src/dtos/editing.dto.js';
 import {
   DEFAULT_SEARCH_ORDER,
   IdsFilter,
@@ -28,7 +30,8 @@ import {
   SearchOrder,
   StringFilter,
   StringPatternFilter,
-} from 'src/dtos/search.dto';
+  isAlbumConfined,
+} from 'src/dtos/search.dto.js';
 import {
   AssetFileType,
   AssetOrder,
@@ -37,12 +40,15 @@ import {
   DatabaseExtension,
   ExifOrientation,
   SearchOrderField,
-} from 'src/enum';
-import { AssetSearchBuilderOptions, AssetSearchBuilderV3Options } from 'src/repositories/search.repository';
-import { DB } from 'src/schema';
-import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
-import { AudioStreamInfo, VectorExtension, VideoFormat, VideoPacketInfo, VideoStreamInfo } from 'src/types';
-import { fromChecksum } from 'src/utils/request';
+} from 'src/enum.js';
+import {
+  AssetSearchBuilderOptions,
+  AssetSearchBuilderV3Options,
+  AssetSearchScope,
+} from 'src/repositories/search.repository.js';
+import { DB } from 'src/schema/index.js';
+import { AssetExifTable } from 'src/schema/tables/asset-exif.table.js';
+import { fromChecksum } from 'src/utils/request.js';
 
 export const getKyselyConfig = (connection: DatabaseConnectionParams): KyselyConfig => {
   return {
@@ -80,8 +86,6 @@ const uniqueIds = (ids: string[]) => [...new Set(ids)];
 export const asUuid = (id: string | Expression<string>) => sql<string>`${id}::uuid`;
 
 export const anyUuid = (ids: string[]) => sql<string>`any(${`{${ids}}`}::uuid[])`;
-
-export const asVector = (embedding: number[]) => sql<string>`${`[${embedding}]`}::vector`;
 
 export const unnest = (array: string[]) => sql<Record<string, string>>`unnest(array[${sql.join(array)}]::text[])`;
 
@@ -237,66 +241,48 @@ export function withFilePath(eb: ExpressionBuilder<DB, 'asset'>, type: AssetFile
     .where('asset_file.isEdited', '=', sql.lit(isEdited));
 }
 
-export function withFacesAndPeople(
-  eb: ExpressionBuilder<DB, 'asset'>,
-  withHidden?: boolean,
-  withDeletedFace?: boolean,
-) {
-  return jsonArrayFrom(
-    eb
-      .selectFrom('asset_face')
-      .leftJoinLateral(
-        (eb) =>
-          eb.selectFrom('person').selectAll('person').whereRef('asset_face.personId', '=', 'person.id').as('person'),
-        (join) => join.onTrue(),
-      )
-      .selectAll('asset_face')
-      .select((eb) => eb.table('person').$castTo<ShallowDehydrateObject<Person>>().as('person'))
-      // Fork: per-viewer person assignments linked via asset_face_person.
-      .select((eb) =>
-        jsonArrayFrom(
-          eb
-            .selectFrom('asset_face_person')
-            .innerJoin('person', 'person.id', 'asset_face_person.personId')
-            .selectAll('person')
-            .whereRef('asset_face_person.faceId', '=', 'asset_face.id'),
+export type WithFacesAndPeopleOptions = {
+  /** whose version of the person to select */
+  viewingUserId?: string;
+  withHidden?: boolean;
+  withDeletedFace?: boolean;
+};
+
+export function withFacesAndPeople({ viewingUserId, withHidden, withDeletedFace }: WithFacesAndPeopleOptions) {
+  return (eb: ExpressionBuilder<DB, 'asset'>) =>
+    jsonArrayFrom(
+      eb
+        .selectFrom('asset_face')
+        .leftJoinLateral(
+          (eb) =>
+            eb
+              .selectFrom('person')
+              .selectAll('person')
+              .whereRef('person.personGroupId', '=', 'asset_face.personGroupId')
+              .$if(!viewingUserId, (qb) => qb.whereRef('person.ownerId', '=', 'asset.ownerId'))
+              .$if(!!viewingUserId, (qb) => qb.where('person.ownerId', '=', viewingUserId!))
+              .as('person'),
+          (join) => join.onTrue(),
         )
-          .$castTo<ShallowDehydrateObject<Person>[]>()
-          .as('people'),
-      )
-      .whereRef('asset_face.assetId', '=', 'asset.id')
-      .$if(!withDeletedFace, (qb) => qb.where('asset_face.deletedAt', 'is', null))
-      .$if(!withHidden, (qb) => qb.where('asset_face.isVisible', 'is', true)),
-  ).as('faces');
+        .selectAll('asset_face')
+        .select((eb) => eb.table('person').$castTo<ShallowDehydrateObject<Person>>().as('person'))
+        .whereRef('asset_face.assetId', '=', 'asset.id')
+        .$if(!withDeletedFace, (qb) => qb.where('asset_face.deletedAt', 'is', null))
+        .$if(!withHidden, (qb) => qb.where('asset_face.isVisible', 'is', true)),
+    ).as('faces');
 }
 
-export function hasPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personIds: string[]) {
+export function hasPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personGroupIds: string[]) {
   return qb.innerJoin(
     (eb) =>
       eb
-        // Fork: union person links from the owner column and the shared join table,
-        // so searching by a person also matches faces recognized on shared assets.
-        .selectFrom((inner) =>
-          inner
-            .selectFrom('asset_face')
-            .select(['asset_face.assetId as assetId', 'asset_face.personId as personId'])
-            .where('asset_face.personId', 'is not', null)
-            .where('asset_face.deletedAt', 'is', null)
-            .where('asset_face.isVisible', 'is', true)
-            .unionAll(
-              inner
-                .selectFrom('asset_face_person')
-                .innerJoin('asset_face', 'asset_face.id', 'asset_face_person.faceId')
-                .select(['asset_face.assetId as assetId', 'asset_face_person.personId as personId'])
-                .where('asset_face.deletedAt', 'is', null)
-                .where('asset_face.isVisible', 'is', true),
-            )
-            .as('face_links'),
-        )
-        .select('face_links.assetId as assetId')
-        .where('face_links.personId', '=', anyUuid(personIds!))
-        .groupBy('face_links.assetId')
-        .having((eb) => eb.fn.count('face_links.personId').distinct(), '=', personIds.length)
+        .selectFrom('asset_face')
+        .select('assetId')
+        .where('personGroupId', '=', anyUuid(personGroupIds!))
+        .where('deletedAt', 'is', null)
+        .where('isVisible', 'is', true)
+        .groupBy('assetId')
+        .having((eb) => eb.fn.count('personGroupId').distinct(), '=', personGroupIds.length)
         .as('has_people'),
     (join) => join.onRef('has_people.assetId', '=', 'asset.id'),
   );
@@ -330,6 +316,22 @@ export function hasPets<O>(qb: SelectQueryBuilder<DB, 'asset', O>, petIds: strin
   );
 }
 
+export function inSharedAlbum(userId: string, assetId: 'asset.id' | 'asset_face.assetId') {
+  const eb = expressionBuilder<DB, 'asset' | 'asset_face'>();
+  return eb.exists(
+    eb
+      .selectFrom('album_asset')
+      .select(sql.lit(1).as('exists'))
+      .innerJoin('album', (join) =>
+        join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null),
+      )
+      .innerJoin('album_user', (join) =>
+        join.onRef('album_user.albumId', '=', 'album.id').on('album_user.userId', '=', userId),
+      )
+      .whereRef('album_asset.assetId', '=', assetId),
+  );
+}
+
 export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: string[]) {
   return qb.innerJoin(
     (eb) =>
@@ -341,26 +343,6 @@ export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: st
         .having((eb) => eb.fn.count('albumId').distinct(), '=', albumIds.length)
         .as('has_album'),
     (join) => join.onRef('has_album.assetId', '=', 'asset.id'),
-  );
-}
-
-/**
- * Fork: matches assets that are in an album accessible to `userId` — either an
- * album the user owns, or one shared with them. Mirrors the album-access rule
- * in access.repository.ts (AssetAccess.checkAlbumAccess).
- */
-export function withSharedAlbumAccess(eb: ExpressionBuilder<DB, 'asset'>, userId: string) {
-  return eb.exists(
-    eb
-      .selectFrom('album_asset')
-      .innerJoin('album', 'album.id', 'album_asset.albumId')
-      .innerJoin('album_user', 'album_user.albumId', 'album.id')
-      .whereRef('album_asset.assetId', '=', 'asset.id')
-      .where('album.deletedAt', 'is', null)
-      // v3 stores album ownership as an `album_user` row with the owner role,
-      // so this covers both owners and users the album is shared with.
-      .where('album_user.userId', '=', asUuid(userId))
-      .select(sql`1`.as('exists')),
   );
 }
 
@@ -540,7 +522,7 @@ export function searchAssetBuilderLegacy(kysely: Kysely<DB>, options: AssetSearc
         const ownerMatch = eb('asset.ownerId', '=', anyUuid(options.userIds!));
         // Fork: also surface assets shared with the viewer via albums.
         return options.sharedAlbumWithUserId
-          ? eb.or([ownerMatch, withSharedAlbumAccess(eb, options.sharedAlbumWithUserId)])
+          ? eb.or([ownerMatch, inSharedAlbum(options.sharedAlbumWithUserId, 'asset.id')])
           : ownerMatch;
       }),
     )
@@ -596,7 +578,9 @@ export function searchAssetBuilderLegacy(kysely: Kysely<DB>, options: AssetSearc
     )
     .$if(options.withStacked === false, (qb) => qb.where('asset.stackId', 'is', null))
     .$if(!!options.withExif, withExifInner)
-    .$if(!!(options.withFaces || options.withPeople), (qb) => qb.select(withFacesAndPeople))
+    .$if(!!(options.withFaces || options.withPeople), (qb) =>
+      qb.select(withFacesAndPeople({ viewingUserId: options.viewingUserId! })),
+    )
     .$if(!options.withDeleted, (qb) => qb.where('asset.deletedAt', 'is', null));
 }
 
@@ -654,7 +638,7 @@ function albumIdsPredicates(eb: AssetExpressionBuilder, filter?: IdsFilter) {
 }
 
 function personIdsPredicates(eb: AssetExpressionBuilder, filter?: IdsFilter) {
-  const matching = (ids: string[]) => visibleFaces(eb).where('asset_face.personId', '=', anyUuid(ids));
+  const matching = (ids: string[]) => visibleFaces(eb).where('asset_face.personGroupId', '=', anyUuid(ids));
   return idsPredicates(eb, filter, {
     matchesAny: (ids) => eb.exists(matching(ids)),
     matchesAll: (ids) =>
@@ -662,7 +646,7 @@ function personIdsPredicates(eb: AssetExpressionBuilder, filter?: IdsFilter) {
         matching(ids)
           .select('asset_face.assetId')
           .groupBy('asset_face.assetId')
-          .having((eb) => eb.fn.count('asset_face.personId').distinct(), '=', ids.length),
+          .having((eb) => eb.fn.count('asset_face.personGroupId').distinct(), '=', ids.length),
       ),
   });
 }
@@ -847,8 +831,22 @@ function branchPredicates(eb: AssetExpressionBuilder, branch: SearchFilterBranch
 
 // ordering is deliberately left to the caller so aggregate-only consumers (counts, stats)
 // can compose the same filters without stripping an order by
-export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuilderV3Options) {
+export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuilderV3Options, scope: AssetSearchScope) {
   const filter = options.filter ?? {};
+  const branches = filter.or ?? [];
+  const ownershipPredicate = (eb: AssetExpressionBuilder) => {
+    const isOwner = eb('asset.ownerId', '=', anyUuid(scope.userIds));
+    // Fork: also surface assets shared with the viewer via albums.
+    return scope.sharedAlbumWithUserId
+      ? eb.or([isOwner, inSharedAlbum(scope.sharedAlbumWithUserId, 'asset.id')])
+      : isOwner;
+  };
+  // search universe: own+partner assets unless album-confined, which searches the albums instead;
+  // ownership lands nowhere (top level confined), per unconfined branch, or hoisted globally
+  const topConfined = isAlbumConfined(filter);
+  const anyBranchConfined = branches.some((branch) => isAlbumConfined(branch));
+  const scopePerBranch = !topConfined && anyBranchConfined;
+  const scopeGlobally = !topConfined && !anyBranchConfined;
 
   return (
     kysely
@@ -857,15 +855,27 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
       // postgres eliminates the left join when no exif column is referenced, so unused joins are free
       .leftJoin('asset_exif', 'asset.id', 'asset_exif.assetId')
       .$if(!!options.withExif, (qb) => qb.select(selectExifInfo))
-      .$if(!!options.userIds && options.userIds.length > 0, (qb) =>
-        qb.where('asset.ownerId', '=', anyUuid(options.userIds!)),
+      .$if(scopeGlobally, (qb) => qb.where(ownershipPredicate))
+      .where((eb) =>
+        eb.or([eb('asset.visibility', '!=', AssetVisibility.Locked), eb('asset.ownerId', '=', scope.lockedOwnerId)]),
       )
-      .$if(!!(options.withFaces || options.withPeople), (qb) => qb.select(withFacesAndPeople))
+      .$if(!!(options.withFaces || options.withPeople), (qb) =>
+        qb.select(withFacesAndPeople({ viewingUserId: scope.viewingUserId! })),
+      )
       .$if(options.withStacked === false, (qb) => qb.where('asset.stackId', 'is', null))
       .where((eb) => {
         const predicates = branchPredicates(eb, filter);
-        if (filter.or && filter.or.length > 0) {
-          predicates.push(eb.or(filter.or.map((branch) => eb.and(branchPredicates(eb, branch)))));
+        if (branches.length > 0) {
+          predicates.push(
+            eb.or(
+              branches.map((branch) =>
+                eb.and([
+                  ...branchPredicates(eb, branch),
+                  ...(scopePerBranch && !isAlbumConfined(branch) ? [ownershipPredicate(eb)] : []),
+                ]),
+              ),
+            ),
+          );
         }
         return predicates.length > 0 ? eb.and(predicates) : eb.lit(true);
       })
@@ -894,160 +904,238 @@ export function withSearchOrder(qb: ReturnType<typeof searchAssetBuilder>, order
   );
 }
 
+const scopeExample: AssetSearchScope = { userIds: [DummyValue.UUID], lockedOwnerId: DummyValue.UUID };
+
 export const searchMetadataV3Examples: GenerateSqlQueries[] = [
-  { name: 'baseline', params: [{ size: 100 }, { userIds: [DummyValue.UUID] }] },
-  { name: 'empty', params: [{ size: 100 }, {}] },
+  { name: 'baseline', params: [{ take: 100 }, {}, scopeExample] },
+  {
+    name: 'or-mixed-scope',
+    params: [
+      { take: 100 },
+      {
+        filter: { or: [{ albumIds: { any: [DummyValue.UUID] } }, { city: { eq: DummyValue.STRING } }] },
+      },
+      scopeExample,
+    ],
+  },
   {
     name: 'or-exif-only',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { or: [{ city: { eq: DummyValue.STRING } }] } }],
+    params: [
+      { take: 100 },
+      {
+        filter: { or: [{ city: { eq: DummyValue.STRING } }] },
+      },
+      scopeExample,
+    ],
   },
   {
     name: 'string-eq-null',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { city: { eq: null } } }],
+    params: [{ take: 100 }, { filter: { city: { eq: null } } }, scopeExample],
   },
   {
     name: 'string-pattern-like',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { description: { like: DummyValue.STRING } } }],
+    params: [
+      { take: 100 },
+      {
+        filter: { description: { like: DummyValue.STRING } },
+      },
+      scopeExample,
+    ],
   },
   {
     name: 'string-pattern-notLike',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { description: { notLike: DummyValue.STRING } } }],
+    params: [
+      { take: 100 },
+      {
+        filter: { description: { notLike: DummyValue.STRING } },
+      },
+      scopeExample,
+    ],
   },
   {
     name: 'string-pattern-startsWith',
     params: [
-      { size: 100 },
-      { userIds: [DummyValue.UUID], filter: { originalFileName: { startsWith: DummyValue.STRING } } },
+      { take: 100 },
+      {
+        filter: { originalFileName: { startsWith: DummyValue.STRING } },
+      },
+      scopeExample,
     ],
   },
   {
     name: 'string-similarity-ocr',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { ocr: { matches: DummyValue.STRING } } }],
+    params: [{ take: 100 }, { filter: { ocr: { matches: DummyValue.STRING } } }, scopeExample],
   },
   {
     name: 'ids-any',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { albumIds: { any: [DummyValue.UUID] } } }],
+    params: [{ take: 100 }, { filter: { albumIds: { any: [DummyValue.UUID] } } }, scopeExample],
   },
   {
     name: 'ids-all',
     params: [
-      { size: 100 },
-      { userIds: [DummyValue.UUID], filter: { personIds: { all: [DummyValue.UUID, DummyValue.UUID_1] } } },
+      { take: 100 },
+      {
+        filter: { personIds: { all: [DummyValue.UUID, DummyValue.UUID_1] } },
+      },
+      scopeExample,
     ],
   },
   {
     name: 'ids-all-single',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { albumIds: { all: [DummyValue.UUID] } } }],
+    params: [{ take: 100 }, { filter: { albumIds: { all: [DummyValue.UUID] } } }, scopeExample],
   },
   {
     name: 'ids-none',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { tagIds: { none: [DummyValue.UUID] } } }],
+    params: [{ take: 100 }, { filter: { tagIds: { none: [DummyValue.UUID] } } }, scopeExample],
   },
   {
     name: 'ids-tags-all',
     params: [
-      { size: 100 },
-      { userIds: [DummyValue.UUID], filter: { tagIds: { all: [DummyValue.UUID, DummyValue.UUID_1] } } },
+      { take: 100 },
+      {
+        filter: { tagIds: { all: [DummyValue.UUID, DummyValue.UUID_1] } },
+      },
+      scopeExample,
     ],
   },
   {
     name: 'has-albums-false',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { hasAlbums: { eq: false } } }],
+    params: [{ take: 100 }, { filter: { hasAlbums: { eq: false } } }, scopeExample],
   },
   {
     name: 'is-encoded',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { isEncoded: { eq: true } } }],
+    params: [{ take: 100 }, { filter: { isEncoded: { eq: true } } }, scopeExample],
   },
   {
     name: 'number-range',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { fileSizeInBytes: { gte: 100, lte: 1000 } } }],
+    params: [
+      { take: 100 },
+      {
+        filter: { fileSizeInBytes: { gte: 100, lte: 1000 } },
+      },
+      scopeExample,
+    ],
   },
   {
     name: 'date-eq',
-    params: [{ size: 100 }, { userIds: [DummyValue.UUID], filter: { takenAt: { eq: DummyValue.DATE } } }],
+    params: [{ take: 100 }, { filter: { takenAt: { eq: DummyValue.DATE } } }, scopeExample],
   },
   {
     name: 'date-range',
     params: [
-      { size: 100 },
+      { take: 100 },
       {
-        userIds: [DummyValue.UUID],
         filter: { takenAt: { gte: DummyValue.DATE, lt: DummyValue.DATE } },
       },
+      scopeExample,
     ],
   },
   {
     name: 'order-fileSize-noExif',
     params: [
-      { size: 100 },
+      { take: 100 },
       {
-        userIds: [DummyValue.UUID],
         order: { field: SearchOrderField.FileSizeInBytes, direction: AssetOrder.Desc },
         withExif: false,
       },
+      scopeExample,
     ],
   },
   {
     name: 'order-rating-withExif',
     params: [
-      { size: 100 },
+      { take: 100 },
       {
-        userIds: [DummyValue.UUID],
         order: { field: SearchOrderField.Rating, direction: AssetOrder.Asc },
         withExif: true,
       },
+      scopeExample,
     ],
   },
   {
     name: 'or-branches',
     params: [
-      { size: 100 },
+      { take: 100 },
       {
-        userIds: [DummyValue.UUID],
         filter: {
           or: [{ isFavorite: { eq: true } }, { personIds: { any: [DummyValue.UUID] } }],
         },
       },
+      scopeExample,
     ],
   },
   {
     name: 'or-with-top-level',
     params: [
-      { size: 100 },
+      { take: 100 },
       {
-        userIds: [DummyValue.UUID],
         filter: {
           takenAt: { gte: DummyValue.DATE, lt: DummyValue.DATE },
           or: [{ isFavorite: { eq: true } }, { albumIds: { any: [DummyValue.UUID] } }],
         },
       },
+      scopeExample,
     ],
+  },
+  {
+    name: 'cursor-offset',
+    params: [{ take: 100, skip: 100 }, { filter: { isFavorite: { eq: true } } }, scopeExample],
+  },
+];
+
+export const searchRandomV3Examples: GenerateSqlQueries[] = [
+  { name: 'baseline', params: [100, {}, scopeExample] },
+  {
+    name: 'with-filter',
+    params: [100, { filter: { isFavorite: { eq: true } } }, scopeExample],
+  },
+];
+
+export const searchSmartV3Examples: GenerateSqlQueries[] = [
+  {
+    name: 'baseline',
+    params: [{ take: 100 }, { embedding: DummyValue.VECTOR }, scopeExample],
+  },
+  {
+    name: 'with-filter',
+    params: [
+      { take: 100 },
+      {
+        embedding: DummyValue.VECTOR,
+        filter: { takenAt: { gte: DummyValue.DATE, lt: DummyValue.DATE } },
+      },
+      scopeExample,
+    ],
+  },
+  {
+    name: 'cursor-offset',
+    params: [{ take: 100, skip: 100 }, { embedding: DummyValue.VECTOR }, scopeExample],
   },
 ];
 
 export const searchStatisticsV3Examples: GenerateSqlQueries[] = [
-  { name: 'baseline', params: [{ userIds: [DummyValue.UUID] }] },
+  { name: 'baseline', params: [{}, scopeExample] },
   {
     name: 'with-filter',
     params: [
       {
-        userIds: [DummyValue.UUID],
         filter: {
           takenAt: { gte: DummyValue.DATE, lt: DummyValue.DATE },
           fileSizeInBytes: { gte: 100 },
         },
       },
+      scopeExample,
     ],
   },
   {
     name: 'with-or',
     params: [
       {
-        userIds: [DummyValue.UUID],
         filter: {
           or: [{ isFavorite: { eq: true } }, { hasAlbums: { eq: false } }],
         },
       },
+      scopeExample,
     ],
   },
 ];

@@ -799,7 +799,8 @@ span,small{{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:elli
 
 
 def evaluate_species(args: argparse.Namespace) -> None:
-    from immich_ml.models import PetDetector
+    from immich_ml.models.pet_recognition.detection import PetDetector
+    from immich_ml.schemas import PetDetectionOptions
 
     data_dir = Path(args.data).resolve()
     output_dir = Path(args.output).resolve()
@@ -810,10 +811,11 @@ def evaluate_species(args: argparse.Namespace) -> None:
     for model_name in [value.strip() for value in args.models.split(",") if value.strip()]:
         print(f"Loading {model_name} for {len(samples)} labeled cat/dog images", flush=True)
         cache_dir = Path(args.cache) / model_name if args.cache else None
-        detector = PetDetector(model_name, min_score=args.raw_min_score, cache_dir=cache_dir)
+        detector = PetDetector(model_name, cache_dir=cache_dir)
+        options = PetDetectionOptions(min_score=args.raw_min_score)
         rows: list[dict[str, Any]] = []
         for index, (path, expected) in enumerate(samples, start=1):
-            output = detector.predict(path.read_bytes())
+            output = detector.predict(path.read_bytes(), options=options)
             if len(output["scores"]):
                 best = int(np.argmax(output["scores"]))
                 predicted = output["species"][best]

@@ -5,7 +5,6 @@
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import ControlAppBar from '$lib/components/shared-components/ControlAppBar.svelte';
-  import CreateSharedLink from '$lib/components/timeline/actions/CreateSharedLinkAction.svelte';
   import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
   import FavoriteAction from '$lib/components/timeline/actions/FavoriteAction.svelte';
   import SelectAllAssets from '$lib/components/timeline/actions/SelectAllAction.svelte';
@@ -18,7 +17,6 @@
   import { Route } from '$lib/route';
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { handleError } from '$lib/utils/handle-error';
-  import { isExternalUrl } from '$lib/utils/navigation';
   import { AssetVisibility, Species, getPets, updatePet, type PetResponseDto } from '@immich/sdk';
   import {
     ActionButton,
@@ -46,10 +44,7 @@
   const options = $derived({ visibility: AssetVisibility.Timeline, petId: pet.id });
 
   onMount(() => {
-    const requestedPreviousRoute = page.url.searchParams.get('previousRoute');
-    if (requestedPreviousRoute && !isExternalUrl(requestedPreviousRoute)) {
-      previousRoute = requestedPreviousRoute;
-    }
+    previousRoute = Route.continue(page.url.searchParams.get('previousRoute'), Route.pets()).toString();
   });
 
   afterNavigate(({ from }) => {
@@ -203,7 +198,7 @@
     <AssetSelectControlBar>
       {@const Actions = getAssetBulkActions($t)}
       <CommandPaletteDefaultProvider name={$t('assets')} actions={Object.values(Actions)} />
-      <CreateSharedLink />
+      <ActionButton action={Actions.CreateSharedLink} />
       <SelectAllAssets {timelineManager} assetInteraction={assetMultiSelectManager} />
       <ActionButton action={Actions.AddToAlbum} />
       <FavoriteAction

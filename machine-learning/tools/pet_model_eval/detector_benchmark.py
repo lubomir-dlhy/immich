@@ -185,14 +185,16 @@ class Detector:
 
 class ImmichYoloxDetector(Detector):
     def __init__(self) -> None:
-        from immich_ml.models import PetDetector
+        from immich_ml.models.pet_recognition.detection import PetDetector
+        from immich_ml.schemas import PetDetectionOptions
 
-        self.model = PetDetector("yolox_x", min_score=0.01, cache_dir=Path("/cache/yolox_x"))
+        self.model = PetDetector("yolox_x", cache_dir=Path("/cache/yolox_x"))
+        self.options = PetDetectionOptions(min_score=0.01)
 
     def predict(self, image: Image.Image, threshold: float) -> list[dict[str, Any]]:
         buffer = io.BytesIO()
         image.save(buffer, "JPEG", quality=95)
-        result = self.model.predict(buffer.getvalue())
+        result = self.model.predict(buffer.getvalue(), options=self.options)
         return [
             {
                 "species": str(species),

@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { Insertable, Kysely, sql, Updateable } from 'kysely';
+import { Insertable, Kysely, Updateable, sql } from 'kysely';
 import { jsonArrayFrom, jsonObjectFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
-import { AssetFileType, AssetVisibility, VectorIndex } from 'src/enum';
-import { probes } from 'src/repositories/database.repository';
-import { DB } from 'src/schema';
-import { AssetPetTable } from 'src/schema/tables/asset-pet.table';
-import { PetSearchTable } from 'src/schema/tables/pet-search.table';
-import { PetTable } from 'src/schema/tables/pet.table';
-import { withFiles } from 'src/utils/database';
+import { AssetFileType, AssetVisibility, VectorIndex } from 'src/enum.js';
+import { probes } from 'src/repositories/database.repository.js';
+import { DB } from 'src/schema/index.js';
+import { AssetPetTable } from 'src/schema/tables/asset-pet.table.js';
+import { PetSearchTable } from 'src/schema/tables/pet-search.table.js';
+import { PetTable } from 'src/schema/tables/pet.table.js';
+import { withFiles } from 'src/utils/database.js';
 
 export interface GetSharedPetSightingsOptions {
   assetIds?: string[];
@@ -511,6 +511,40 @@ export class PetRepository {
         .where('asset_pet_identity.petId', 'in', ownedPet)
         .execute();
     });
+  }
+
+  async getAdditionalAccessUserIds(assetId: string, ownerId: string): Promise<string[]> {
+    const albumRows = await this.db
+      .selectFrom('album_asset')
+      .innerJoin('album', (join) =>
+        join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null),
+      )
+      .innerJoin('album_user', 'album_user.albumId', 'album.id')
+      .where('album_asset.assetId', '=', assetId)
+      .select('album_user.userId')
+      .execute();
+
+    const partnerRows = await this.db
+      .selectFrom('partner')
+      .innerJoin('asset', (join) =>
+        join
+          .onRef('asset.ownerId', '=', 'partner.sharedById')
+          .on('asset.id', '=', assetId)
+          .on('asset.visibility', 'in', [AssetVisibility.Timeline, AssetVisibility.Hidden]),
+      )
+      .where('partner.sharedById', '=', ownerId)
+      .select('partner.sharedWithId as userId')
+      .execute();
+
+    const userIds = new Set<string>();
+    for (const row of albumRows) {
+      userIds.add(row.userId);
+    }
+    for (const row of partnerRows) {
+      userIds.add(row.userId);
+    }
+    userIds.delete(ownerId);
+    return [...userIds];
   }
 
   async hasIdentityForUser(petAssetId: string, userId: string): Promise<boolean> {

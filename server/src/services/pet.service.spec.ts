@@ -1,6 +1,6 @@
-import { AssetType, AssetVisibility, JobName, JobStatus } from 'src/enum';
-import { PetService } from 'src/services/pet.service';
-import { makeStream, newTestService, ServiceMocks } from 'test/utils';
+import { AssetType, AssetVisibility, JobName, JobStatus } from 'src/enum.js';
+import { PetService } from 'src/services/pet.service.js';
+import { ServiceMocks, makeStream, newTestService } from 'test/utils.js';
 
 const petConfig = {
   enabled: true,
@@ -47,7 +47,7 @@ describe(PetService.name, () => {
   beforeEach(() => {
     ({ sut, mocks } = newTestService(PetService));
     mocks.systemMetadata.get.mockResolvedValue({ machineLearning: { petRecognition: petConfig } });
-    mocks.person.getAdditionalAccessUserIds.mockResolvedValue([]);
+    mocks.pet.getAdditionalAccessUserIds.mockResolvedValue([]);
     mocks.pet.getSightingsForSharedRecognition.mockReturnValue(makeStream([]));
     mocks.pet.deleteSharedIdentitiesWithoutAccess.mockResolvedValue([]);
     mocks.pet.searchIdentityCandidates.mockResolvedValue([]);
@@ -922,7 +922,7 @@ describe(PetService.name, () => {
     const viewerId = '50000000-0000-4000-8000-000000000001';
     const viewerPetId = '60000000-0000-4000-8000-000000000001';
     mocks.pet.getSightingForRecognition.mockResolvedValue({ ...sighting, petId: viewerPetId });
-    mocks.person.getAdditionalAccessUserIds.mockResolvedValue([viewerId]);
+    mocks.pet.getAdditionalAccessUserIds.mockResolvedValue([viewerId]);
     mocks.pet.hasIdentityForUser.mockResolvedValue(false);
     mocks.pet.search.mockResolvedValue([]);
     mocks.pet.searchIdentityCandidates.mockResolvedValue([{ petId: viewerPetId, distance: 0.05 }]);

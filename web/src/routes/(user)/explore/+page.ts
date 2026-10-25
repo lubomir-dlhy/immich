@@ -1,17 +1,27 @@
-import { getAllPeople, getExploreData, getPets } from '@immich/sdk';
+import { getAllPeople, getExploreData, getPets, MemorySearchOrder } from '@immich/sdk';
+import { memoryManager } from '$lib/managers/memory-manager.svelte';
 import { authenticate } from '$lib/utils/auth';
 import { getFormatter } from '$lib/utils/i18n';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ url }) => {
   await authenticate(url);
-  const [items, response, pets] = await Promise.all([getExploreData(), getAllPeople({ withHidden: false }), getPets()]);
+  memoryManager.setFilters({ size: 12, order: MemorySearchOrder.Desc });
+  await memoryManager.applyPreferences();
+
+  const [explore, people, , pets] = await Promise.all([
+    getExploreData(),
+    getAllPeople({ withHidden: false }),
+    memoryManager.refresh(),
+    getPets(),
+  ]);
   const $t = await getFormatter();
 
   return {
-    items,
-    response,
+    explore,
+    people,
     pets,
+    memories: memoryManager.memories,
     meta: {
       title: $t('explore'),
     },

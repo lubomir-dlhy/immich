@@ -1,15 +1,15 @@
 import {
   Column,
   ForeignKeyColumn,
-  Generated,
+  type Generated,
   Index,
   PrimaryGeneratedColumn,
   Table,
   UpdateDateColumn,
 } from '@immich/sql-tools';
-import { UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
-import { AssetTable } from 'src/schema/tables/asset.table';
-import { PetTable } from 'src/schema/tables/pet.table';
+import { UpdateIdColumn, UpdatedAtTrigger } from 'src/decorators.js';
+import { AssetTable } from 'src/schema/tables/asset.table.js';
+import { PetTable } from 'src/schema/tables/pet.table.js';
 
 @Table({ name: 'asset_pet' })
 @UpdatedAtTrigger('asset_pet_updatedAt')

@@ -1,16 +1,16 @@
 import { BadRequestException } from '@nestjs/common';
-import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
-import { AlbumUserRole, AssetOrder, UserMetadataKey } from 'src/enum';
-import { AlbumService } from 'src/services/album.service';
-import { AlbumUserFactory } from 'test/factories/album-user.factory';
-import { AlbumFactory } from 'test/factories/album.factory';
-import { AssetFactory } from 'test/factories/asset.factory';
-import { AuthFactory } from 'test/factories/auth.factory';
-import { UserFactory } from 'test/factories/user.factory';
-import { authStub } from 'test/fixtures/auth.stub';
-import { getForAlbum } from 'test/mappers';
-import { newUuid } from 'test/small.factory';
-import { newTestService, ServiceMocks } from 'test/utils';
+import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto.js';
+import { AlbumUserRole, AssetOrder, UserMetadataKey } from 'src/enum.js';
+import { AlbumService } from 'src/services/album.service.js';
+import { AlbumUserFactory } from 'test/factories/album-user.factory.js';
+import { AlbumFactory } from 'test/factories/album.factory.js';
+import { AssetFactory } from 'test/factories/asset.factory.js';
+import { AuthFactory } from 'test/factories/auth.factory.js';
+import { UserFactory } from 'test/factories/user.factory.js';
+import { authStub } from 'test/fixtures/auth.stub.js';
+import { getForAlbum } from 'test/mappers.js';
+import { newUuid } from 'test/small.factory.js';
+import { ServiceMocks, newTestService } from 'test/utils.js';
 
 describe(AlbumService.name, () => {
   let sut: AlbumService;
@@ -250,7 +250,7 @@ describe(AlbumService.name, () => {
         userId: albumUser.userId,
         senderName: owner.name,
       });
-      expect(mocks.event.emit).toHaveBeenCalledWith('SharedFaceAccessChanged', {
+      expect(mocks.event.emit).toHaveBeenCalledWith('SharedAssetAccessChanged', {
         action: 'grant',
         albumId: album.id,
       });
@@ -570,7 +570,7 @@ describe(AlbumService.name, () => {
         userId: user.id,
         senderName: owner.name,
       });
-      expect(mocks.event.emit).toHaveBeenCalledWith('SharedFaceAccessChanged', {
+      expect(mocks.event.emit).toHaveBeenCalledWith('SharedAssetAccessChanged', {
         action: 'grant',
         albumId: album.id,
       });

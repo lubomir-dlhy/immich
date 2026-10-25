@@ -1,8 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
-import { AssetVisibility } from 'src/enum';
-import { TimelineService } from 'src/services/timeline.service';
-import { authStub } from 'test/fixtures/auth.stub';
-import { newTestService, ServiceMocks } from 'test/utils';
+import { AssetVisibility } from 'src/enum.js';
+import { TimelineService } from 'src/services/timeline.service.js';
+import { authStub } from 'test/fixtures/auth.stub.js';
+import { ServiceMocks, newTestService } from 'test/utils.js';
 
 describe(TimelineService.name, () => {
   let sut: TimelineService;
@@ -19,9 +19,12 @@ describe(TimelineService.name, () => {
       await expect(sut.getTimeBuckets(authStub.admin, {})).resolves.toEqual(
         expect.arrayContaining([{ timeBucket: 'bucket', count: 1 }]),
       );
-      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith({
-        userIds: [authStub.admin.user.id],
-      });
+      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(
+        {
+          userIds: [authStub.admin.user.id],
+        },
+        authStub.admin,
+      );
     });
 
     it('should pass bbox options to repository when all bbox fields are provided', async () => {
@@ -36,22 +39,13 @@ describe(TimelineService.name, () => {
         },
       });
 
-      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith({
-        userIds: [authStub.admin.user.id],
-        bbox: { west: -70, south: -30, east: 120, north: 55 },
-      });
-    });
-
-    it('should build a pet timeline that includes accessible shared-album assets', async () => {
-      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: 'bucket', count: 1 }]);
-
-      await sut.getTimeBuckets(authStub.admin, { petId: 'pet-id' });
-
-      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith({
-        petId: 'pet-id',
-        sharedAlbumWithUserId: authStub.admin.user.id,
-        userIds: [authStub.admin.user.id],
-      });
+      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(
+        {
+          userIds: [authStub.admin.user.id],
+          bbox: { west: -70, south: -30, east: 120, north: 55 },
+        },
+        authStub.admin,
+      );
     });
   });
 

@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import AsyncLock from 'async-lock';
 import { Insertable } from 'kysely';
-import { MachineLearningConfig } from 'src/config';
-import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
-import { OnEvent, OnJob } from 'src/decorators';
-import { AuthDto } from 'src/dtos/auth.dto';
+import type { MachineLearningConfig } from 'src/dtos/config.dto.js';
+import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants.js';
+import { OnEvent, OnJob } from 'src/decorators.js';
+import { AuthDto } from 'src/dtos/auth.dto.js';
 import {
   AssetPetCreateDto,
   AssetPetResponseDto,
@@ -18,14 +18,14 @@ import {
   PetSuggestionDto,
   PetTrackAssignmentDto,
   PetUpdateDto,
-} from 'src/dtos/pet.dto';
-import { AssetType, AssetVisibility, JobName, JobStatus, Permission, QueueName, VectorIndex } from 'src/enum';
-import { ArgOf } from 'src/repositories/event.repository';
-import { AssetPetTable } from 'src/schema/tables/asset-pet.table';
-import { PetSearchTable } from 'src/schema/tables/pet-search.table';
-import { BaseService } from 'src/services/base.service';
-import { JobItem, JobOf } from 'src/types';
-import { isPetRecognitionEnabled } from 'src/utils/misc';
+} from 'src/dtos/pet.dto.js';
+import { AssetType, AssetVisibility, JobName, JobStatus, Permission, QueueName, VectorIndex } from 'src/enum.js';
+import { type ArgOf } from 'src/repositories/event.repository.js';
+import { AssetPetTable } from 'src/schema/tables/asset-pet.table.js';
+import { PetSearchTable } from 'src/schema/tables/pet-search.table.js';
+import { BaseService } from 'src/services/base.service.js';
+import { JobItem, type JobOf } from 'src/types.js';
+import { isPetRecognitionEnabled } from 'src/utils/misc.js';
 
 const PET_VIDEO_FRAME_INTERVAL_MS = 5000;
 const PET_VIDEO_MAX_FRAMES = 120;
@@ -157,8 +157,8 @@ export class PetService extends BaseService {
   private readonly videoDetectionLock = new AsyncLock();
   private readonly recognitionLock = new AsyncLock();
 
-  @OnEvent({ name: 'SharedFaceAccessChanged' })
-  async onSharedPetAccessChanged({ action, ...options }: ArgOf<'SharedFaceAccessChanged'>): Promise<void> {
+  @OnEvent({ name: 'SharedAssetAccessChanged' })
+  async onSharedPetAccessChanged({ action, ...options }: ArgOf<'SharedAssetAccessChanged'>): Promise<void> {
     if (action === 'revoke') {
       const affectedPetIds = await this.petRepository.deleteSharedIdentitiesWithoutAccess();
       for (const petId of affectedPetIds) {
@@ -671,10 +671,12 @@ export class PetService extends BaseService {
     let jobs: JobItem[] = [];
     for await (const asset of this.petRepository.streamAssetsForDetection(force)) {
       jobs.push({ name: JobName.AssetDetectPets, data: { id: asset.id, force } });
-      if (jobs.length >= JOBS_ASSET_PAGINATION_SIZE) {
-        await this.jobRepository.queueAll(jobs);
-        jobs = [];
+      if (!(jobs.length >= JOBS_ASSET_PAGINATION_SIZE)) {
+        continue;
       }
+
+      await this.jobRepository.queueAll(jobs);
+      jobs = [];
     }
     await this.jobRepository.queueAll(jobs);
     return JobStatus.Success;
@@ -804,7 +806,10 @@ export class PetService extends BaseService {
             break;
           }
           const nextTimestampMs = frameTimes[frameIndex + 1] ?? asset.duration;
-          const frameDurationMs = nextTimestampMs == null ? null : Math.max(1, nextTimestampMs - frameTimestampMs);
+          const frameDurationMs =
+            nextTimestampMs === null || nextTimestampMs === undefined
+              ? null
+              : Math.max(1, nextTimestampMs - frameTimestampMs);
           await processFrame(frame, frameTimestampMs, frameDurationMs);
         }
       } else {
@@ -860,10 +865,12 @@ export class PetService extends BaseService {
     const queueSightings = async (sightings: AsyncIterable<{ id: string }>) => {
       for await (const sighting of sightings) {
         jobs.push({ name: JobName.PetRecognition, data: { id: sighting.id, deferred: false } });
-        if (jobs.length >= JOBS_ASSET_PAGINATION_SIZE) {
-          await this.jobRepository.queueAll(jobs);
-          jobs = [];
+        if (!(jobs.length >= JOBS_ASSET_PAGINATION_SIZE)) {
+          continue;
         }
+
+        await this.jobRepository.queueAll(jobs);
+        jobs = [];
       }
     };
 
@@ -916,10 +923,7 @@ export class PetService extends BaseService {
       species: sighting.species,
       visibility: sighting.asset.visibility,
     };
-    const accessUserIds = await this.personRepository.getAdditionalAccessUserIds(
-      sighting.assetId,
-      sighting.asset.ownerId,
-    );
+    const accessUserIds = await this.petRepository.getAdditionalAccessUserIds(sighting.assetId, sighting.asset.ownerId);
     for (const userId of accessUserIds) {
       await this.recognizePetForUser(sharedSighting, userId, machineLearning);
     }
@@ -976,10 +980,12 @@ export class PetService extends BaseService {
     let jobs: JobItem[] = [];
     for await (const sighting of this.petRepository.getSightingsForSharedRecognition(options)) {
       jobs.push({ name: JobName.PetRecognition, data: { id: sighting.id, deferred: false } });
-      if (jobs.length >= JOBS_ASSET_PAGINATION_SIZE) {
-        await this.jobRepository.queueAll(jobs);
-        jobs = [];
+      if (!(jobs.length >= JOBS_ASSET_PAGINATION_SIZE)) {
+        continue;
       }
+
+      await this.jobRepository.queueAll(jobs);
+      jobs = [];
     }
     await this.jobRepository.queueAll(jobs);
   }

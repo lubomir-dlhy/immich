@@ -2,16 +2,16 @@ import {
   Column,
   CreateDateColumn,
   ForeignKeyColumn,
-  Generated,
+  type Generated,
   Index,
   PrimaryGeneratedColumn,
   Table,
   Timestamp,
   UpdateDateColumn,
 } from '@immich/sql-tools';
-import { UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
-import { AssetPetTable } from 'src/schema/tables/asset-pet.table';
-import { UserTable } from 'src/schema/tables/user.table';
+import { UpdateIdColumn, UpdatedAtTrigger } from 'src/decorators.js';
+import { AssetPetTable } from 'src/schema/tables/asset-pet.table.js';
+import { UserTable } from 'src/schema/tables/user.table.js';
 
 @Table('pet')
 @Index({ columns: ['ownerId'] })

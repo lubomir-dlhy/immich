@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
-import { Endpoint, HistoryBuilder } from 'src/decorators';
-import { AuthDto } from 'src/dtos/auth.dto';
+import { type Response } from 'express';
+import { Endpoint, HistoryBuilder } from 'src/decorators.js';
+import { type AuthDto } from 'src/dtos/auth.dto.js';
 import {
   AssetPetCreateDto,
   AssetPetResponseDto,
@@ -17,11 +17,11 @@ import {
   PetTrackAssignmentDto,
   PetTrackParamsDto,
   PetUpdateDto,
-} from 'src/dtos/pet.dto';
-import { ApiTag, Permission } from 'src/enum';
-import { Auth, Authenticated, FileResponse } from 'src/middleware/auth.guard';
-import { PetService } from 'src/services/pet.service';
-import { UUIDParamDto } from 'src/validation';
+} from 'src/dtos/pet.dto.js';
+import { ApiTag, Permission } from 'src/enum.js';
+import { Auth, Authenticated, FileResponse } from 'src/middleware/auth.guard.js';
+import { PetService } from 'src/services/pet.service.js';
+import { UUIDParamDto } from 'src/validation.js';
 
 @ApiTags(ApiTag.People)
 @Controller('pets')

@@ -1,14 +1,12 @@
 import { Kysely } from 'kysely';
-import { mapAsset } from 'src/dtos/asset-response.dto';
-import { AssetOrder, AssetVisibility } from 'src/enum';
-import { AssetRepository } from 'src/repositories/asset.repository';
-import { LoggingRepository } from 'src/repositories/logging.repository';
-import { PersonRepository } from 'src/repositories/person.repository';
-import { DB } from 'src/schema';
-import { BaseService } from 'src/services/base.service';
-import { newMediumService } from 'test/medium.factory';
-import { factory } from 'test/small.factory';
-import { getKyselyDB } from 'test/utils';
+import { AssetOrder, AssetOrderBy, AssetVisibility } from 'src/enum.js';
+import { AssetRepository } from 'src/repositories/asset.repository.js';
+import { LoggingRepository } from 'src/repositories/logging.repository.js';
+import { DB } from 'src/schema/index.js';
+import { BaseService } from 'src/services/base.service.js';
+import { newMediumService } from 'test/medium.factory.js';
+import { factory } from 'test/small.factory.js';
+import { getKyselyDB } from 'test/utils.js';
 
 let defaultDatabase: Kysely<DB>;
 
@@ -25,39 +23,47 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+// Metadata extraction is repeatable: probing improves, files get repaired,
+// and a re-run has to be able to correct what an earlier run stored.
+const audioRow = (assetId: string, n: number) => ({
+  assetId,
+  bitrate: 100_000 + n,
+  index: n,
+  profile: n,
+  codecName: `codec-${n}`,
+});
+
+const videoRow = (assetId: string, n: number) => ({
+  assetId,
+  bitrate: 200_000 + n,
+  frameCount: 300 + n,
+  timeBase: 600 + n,
+  index: n,
+  profile: n,
+  level: n,
+  colorPrimaries: n,
+  colorTransfer: n,
+  colorMatrix: n,
+  dvProfile: n,
+  dvLevel: n,
+  dvBlSignalCompatibilityId: n,
+  codecName: `vcodec-${n}`,
+  formatName: `format-${n}`,
+  formatLongName: `format long ${n}`,
+  pixelFormat: `pixfmt-${n}`,
+});
+
+const keyframeRow = (assetId: string, n: number) => ({
+  assetId,
+  pts: [n],
+  accDuration: [n],
+  ownDuration: [n],
+  totalDuration: 1000 + n,
+  packetCount: 10 + n,
+  outputFrames: 20 + n,
+});
+
 describe(AssetRepository.name, () => {
-  // Fork: a shared asset's faces carry per-viewer person links (asset_face_person).
-  describe('getById with shared faces (fork)', () => {
-    it('surfaces the viewer own person on a shared face, and hides it from others', async () => {
-      const { ctx, sut } = setup();
-      const personRepo = ctx.get(PersonRepository);
-      const { user: owner } = await ctx.newUser();
-      const { user: viewer } = await ctx.newUser();
-
-      const { asset } = await ctx.newAsset({ ownerId: owner.id });
-      const { person: ownerPerson } = await ctx.newPerson({ ownerId: owner.id, name: 'Owner Alice' });
-      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerPerson.id });
-
-      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id, name: 'Viewer Alice' });
-      await personRepo.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
-
-      const entity = await sut.getById(asset.id, { faces: { person: true } });
-      expect(entity).toBeDefined();
-
-      // The viewer sees only their own person — never the owner's (privacy).
-      const forViewer = mapAsset(entity!, { auth: factory.auth({ user: { id: viewer.id } }) });
-      const viewerPeopleIds = (forViewer.people ?? []).map((person) => person.id);
-      expect(viewerPeopleIds).toContain(viewerPerson.id);
-      expect(viewerPeopleIds).not.toContain(ownerPerson.id);
-
-      // The owner sees only their own person — never the viewer's.
-      const forOwner = mapAsset(entity!, { auth: factory.auth({ user: { id: owner.id } }) });
-      const ownerPeopleIds = (forOwner.people ?? []).map((person) => person.id);
-      expect(ownerPeopleIds).toContain(ownerPerson.id);
-      expect(ownerPeopleIds).not.toContain(viewerPerson.id);
-    });
-  });
-
   describe('getTimeBucket', () => {
     it('should order assets by local day first and fileCreatedAt within each day', async () => {
       const { ctx, sut } = setup();
@@ -112,45 +118,265 @@ describe(AssetRepository.name, () => {
       );
     });
 
-    // Fork: a person's timeline includes photos of them shared via albums.
-    it('includes shared-album assets containing the viewer person when sharedAlbumWithUserId is set', async () => {
+    it('should order assets by originalFileName when fileCreatedAt is the same (takenAt)', async () => {
       const { ctx, sut } = setup();
-      const personRepo = ctx.get(PersonRepository);
-      const { user: owner } = await ctx.newUser();
-      const { user: viewer } = await ctx.newUser();
-      const auth = factory.auth({ user: { id: viewer.id } });
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
 
-      const { asset } = await ctx.newAsset({
-        ownerId: owner.id,
-        fileCreatedAt: new Date('2026-03-08T23:30:00.000Z'),
-        localDateTime: new Date('2026-03-08T23:30:00.000Z'),
-      });
-      await ctx.newExif({ assetId: asset.id, timeZone: 'UTC' });
-      const { person: ownerPerson } = await ctx.newPerson({ ownerId: owner.id });
-      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerPerson.id });
+      // create all the fake photos
+      const [
+        { asset: time1DSC0001Asset },
+        { asset: time1DSC0002Asset },
+        { asset: time2DSC0003Asset },
+        { asset: time2DSC0004Asset },
+      ] = await Promise.all([
+        // both at 12:30AM
+        ctx.newAsset({
+          ownerId: user.id,
+          fileCreatedAt: new Date('2026-03-09T00:30:00.000Z'),
+          localDateTime: new Date('2026-03-09T00:30:00.000Z'),
+          originalFileName: 'DSC0001.jpg',
+        }),
+        ctx.newAsset({
+          ownerId: user.id,
+          fileCreatedAt: new Date('2026-03-09T00:30:00.000Z'),
+          localDateTime: new Date('2026-03-09T00:30:00.000Z'),
+          originalFileName: 'DSC0002.jpg',
+        }),
+        // both at 1:45AM
+        ctx.newAsset({
+          ownerId: user.id,
+          fileCreatedAt: new Date('2026-03-09T01:45:00.000Z'),
+          localDateTime: new Date('2026-03-09T01:45:00.000Z'),
+          originalFileName: 'DSC0003.jpg',
+        }),
+        ctx.newAsset({
+          ownerId: user.id,
+          fileCreatedAt: new Date('2026-03-09T01:45:00.000Z'),
+          localDateTime: new Date('2026-03-09T01:45:00.000Z'),
+          originalFileName: 'DSC0004.jpg',
+        }),
+      ]);
 
-      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id });
-      await personRepo.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
+      // even though im not gonna do anything with these it's required!
+      await Promise.all([
+        ctx.newExif({ assetId: time1DSC0001Asset.id, timeZone: 'UTC+2' }),
+        ctx.newExif({ assetId: time1DSC0002Asset.id, timeZone: 'UTC+2' }),
+        ctx.newExif({ assetId: time2DSC0003Asset.id, timeZone: 'UTC+2' }),
+        ctx.newExif({ assetId: time2DSC0004Asset.id, timeZone: 'UTC+2' }),
+      ]);
 
-      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
-      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
+      // check the values given by the bucket when descending
+      const descendingBucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          order: AssetOrder.Desc,
+          userIds: [user.id],
+          visibility: AssetVisibility.Timeline,
+          orderBy: AssetOrderBy.TakenAt,
+        },
+        auth,
+      );
+      // make sure they're ordered correctly
+      expect(JSON.parse(descendingBucket.assets)).toEqual(
+        expect.objectContaining({
+          id: [time2DSC0004Asset.id, time2DSC0003Asset.id, time1DSC0002Asset.id, time1DSC0001Asset.id],
+        }),
+      );
 
-      const options = {
-        personId: viewerPerson.id,
-        userIds: [viewer.id],
-        visibility: AssetVisibility.Timeline,
-      };
+      // now do the same when ascending
+      const ascendingBucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          order: AssetOrder.Asc,
+          userIds: [user.id],
+          visibility: AssetVisibility.Timeline,
+          orderBy: AssetOrderBy.TakenAt,
+        },
+        auth,
+      );
+      expect(JSON.parse(ascendingBucket.assets)).toEqual(
+        expect.objectContaining({
+          id: [time1DSC0001Asset.id, time1DSC0002Asset.id, time2DSC0003Asset.id, time2DSC0004Asset.id],
+        }),
+      );
+    });
 
-      const withShared = await sut.getTimeBucket('2026-03-01', { ...options, sharedAlbumWithUserId: viewer.id }, auth);
-      expect(JSON.parse(withShared.assets).id ?? []).toContain(asset.id);
+    it('should order assets by originalFileName when fileCreatedAt is the same (createdAt)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
 
-      // Control: without the shared-album option, the shared asset is excluded.
-      const withoutShared = await sut.getTimeBucket('2026-03-01', options, auth);
-      expect(JSON.parse(withoutShared.assets).id ?? []).not.toContain(asset.id);
+      // create all the fake photos
+      const [
+        { asset: time1DSC0001Asset },
+        { asset: time1DSC0002Asset },
+        { asset: time2DSC0003Asset },
+        { asset: time2DSC0004Asset },
+      ] = await Promise.all([
+        // createdAt = uploadedAt, fileCreatedAt = file metadata
+        // both at 12:30AM
+        ctx.newAsset({
+          ownerId: user.id,
+          fileCreatedAt: new Date('2026-03-09T00:30:00.000Z'),
+          localDateTime: new Date('2026-03-09T00:30:00.000Z'),
+          createdAt: new Date('2026-03-09T00:30:00.000Z'),
+          originalFileName: 'DSC0001.jpg',
+        }),
+        ctx.newAsset({
+          ownerId: user.id,
+          fileCreatedAt: new Date('2026-03-09T00:30:00.000Z'),
+          localDateTime: new Date('2026-03-09T00:30:00.000Z'),
+          createdAt: new Date('2026-03-09T00:30:00.000Z'),
+          originalFileName: 'DSC0002.jpg',
+        }),
+        // both at 1:45AM
+        ctx.newAsset({
+          ownerId: user.id,
+          fileCreatedAt: new Date('2026-03-09T01:45:00.000Z'),
+          localDateTime: new Date('2026-03-09T01:45:00.000Z'),
+          createdAt: new Date('2026-03-09T01:45:00.000Z'),
+          originalFileName: 'DSC0003.jpg',
+        }),
+        ctx.newAsset({
+          ownerId: user.id,
+          fileCreatedAt: new Date('2026-03-09T01:45:00.000Z'),
+          localDateTime: new Date('2026-03-09T01:45:00.000Z'),
+          createdAt: new Date('2026-03-09T01:45:00.000Z'),
+          originalFileName: 'DSC0004.jpg',
+        }),
+      ]);
+
+      // even though im not gonna do anything with these it's required!
+      await Promise.all([
+        ctx.newExif({ assetId: time1DSC0001Asset.id, timeZone: 'UTC+2' }),
+        ctx.newExif({ assetId: time1DSC0002Asset.id, timeZone: 'UTC+2' }),
+        ctx.newExif({ assetId: time2DSC0003Asset.id, timeZone: 'UTC+2' }),
+        ctx.newExif({ assetId: time2DSC0004Asset.id, timeZone: 'UTC+2' }),
+      ]);
+
+      // check the values given by the bucket when descending
+      const descendingBucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          order: AssetOrder.Desc,
+          userIds: [user.id],
+          visibility: AssetVisibility.Timeline,
+          orderBy: AssetOrderBy.CreatedAt,
+        },
+        auth,
+      );
+      // make sure they're ordered correctly
+      expect(JSON.parse(descendingBucket.assets)).toEqual(
+        expect.objectContaining({
+          id: [time2DSC0004Asset.id, time2DSC0003Asset.id, time1DSC0002Asset.id, time1DSC0001Asset.id],
+        }),
+      );
+
+      // now do the same when ascending
+      const ascendingBucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          order: AssetOrder.Asc,
+          userIds: [user.id],
+          visibility: AssetVisibility.Timeline,
+          orderBy: AssetOrderBy.CreatedAt,
+        },
+        auth,
+      );
+      expect(JSON.parse(ascendingBucket.assets)).toEqual(
+        expect.objectContaining({
+          id: [time1DSC0001Asset.id, time1DSC0002Asset.id, time2DSC0003Asset.id, time2DSC0004Asset.id],
+        }),
+      );
     });
   });
 
   describe('upsertExif', () => {
+    it('should replace stored audio metadata on a second extraction', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      await sut.upsertExif({
+        exif: { assetId: asset.id, description: 'first' },
+        audio: audioRow(asset.id, 2),
+        lockedPropertiesBehavior: 'skip',
+      });
+      await sut.upsertExif({
+        exif: { assetId: asset.id, description: 'second' },
+        audio: audioRow(asset.id, 1),
+        lockedPropertiesBehavior: 'skip',
+      });
+
+      await expect(
+        ctx.database.selectFrom('asset_audio').selectAll().where('assetId', '=', asset.id).executeTakeFirstOrThrow(),
+      ).resolves.toEqual(audioRow(asset.id, 1));
+    });
+
+    it('should replace stored video metadata on a second extraction', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      await sut.upsertExif({
+        exif: { assetId: asset.id, description: 'first' },
+        video: videoRow(asset.id, 2),
+        lockedPropertiesBehavior: 'skip',
+      });
+      await sut.upsertExif({
+        exif: { assetId: asset.id, description: 'second' },
+        video: videoRow(asset.id, 1),
+        lockedPropertiesBehavior: 'skip',
+      });
+
+      await expect(
+        ctx.database.selectFrom('asset_video').selectAll().where('assetId', '=', asset.id).executeTakeFirstOrThrow(),
+      ).resolves.toEqual(videoRow(asset.id, 1));
+    });
+
+    it('should replace stored keyframe metadata on a second extraction', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      await sut.upsertExif({
+        exif: { assetId: asset.id, description: 'first' },
+        keyframes: keyframeRow(asset.id, 2),
+        lockedPropertiesBehavior: 'skip',
+      });
+      await sut.upsertExif({
+        exif: { assetId: asset.id, description: 'second' },
+        keyframes: keyframeRow(asset.id, 1),
+        lockedPropertiesBehavior: 'skip',
+      });
+
+      await expect(
+        ctx.database.selectFrom('asset_keyframe').selectAll().where('assetId', '=', asset.id).executeTakeFirstOrThrow(),
+      ).resolves.toEqual(keyframeRow(asset.id, 1));
+    });
+
+    // A probe that could not read a stream sends no object at all, and that must
+    // not be read as "delete what is already known".
+    it('should leave stored media metadata alone when an extraction omits it', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      await sut.upsertExif({
+        exif: { assetId: asset.id, description: 'first' },
+        audio: audioRow(asset.id, 2),
+        lockedPropertiesBehavior: 'skip',
+      });
+      await sut.upsertExif({
+        exif: { assetId: asset.id, description: 'second' },
+        lockedPropertiesBehavior: 'skip',
+      });
+
+      await expect(
+        ctx.database.selectFrom('asset_audio').selectAll().where('assetId', '=', asset.id).executeTakeFirstOrThrow(),
+      ).resolves.toEqual(audioRow(asset.id, 2));
+    });
     it('should append to locked columns', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
@@ -273,6 +499,13 @@ describe(AssetRepository.name, () => {
           .where('assetId', '=', asset.id)
           .executeTakeFirstOrThrow(),
       ).resolves.toEqual({ lockedProperties: null });
+    });
+  });
+
+  describe('createAll', () => {
+    it('should return an empty array when given an empty input', async () => {
+      const { sut } = setup();
+      await expect(sut.createAll([])).resolves.toStrictEqual([]);
     });
   });
 });

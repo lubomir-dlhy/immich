@@ -1,26 +1,25 @@
 import { Kysely } from 'kysely';
-import { AssetEditAction } from 'src/dtos/editing.dto';
-import { AssetFileType, AssetMetadataKey, AssetStatus, JobName, SharedLinkType } from 'src/enum';
-import { AccessRepository } from 'src/repositories/access.repository';
-import { AlbumRepository } from 'src/repositories/album.repository';
-import { AssetEditRepository } from 'src/repositories/asset-edit.repository';
-import { AssetJobRepository } from 'src/repositories/asset-job.repository';
-import { AssetRepository } from 'src/repositories/asset.repository';
-import { EventRepository } from 'src/repositories/event.repository';
-import { JobRepository } from 'src/repositories/job.repository';
-import { LoggingRepository } from 'src/repositories/logging.repository';
-import { OcrRepository } from 'src/repositories/ocr.repository';
-import { PersonRepository } from 'src/repositories/person.repository';
-import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository';
-import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
-import { StackRepository } from 'src/repositories/stack.repository';
-import { StorageRepository } from 'src/repositories/storage.repository';
-import { UserRepository } from 'src/repositories/user.repository';
-import { DB } from 'src/schema';
-import { AssetService } from 'src/services/asset.service';
-import { newMediumService } from 'test/medium.factory';
-import { factory } from 'test/small.factory';
-import { getKyselyDB } from 'test/utils';
+import { AssetEditAction } from 'src/dtos/editing.dto.js';
+import { AssetFileType, AssetMetadataKey, AssetStatus, JobName, SharedLinkType } from 'src/enum.js';
+import { AccessRepository } from 'src/repositories/access.repository.js';
+import { AlbumRepository } from 'src/repositories/album.repository.js';
+import { AssetEditRepository } from 'src/repositories/asset-edit.repository.js';
+import { AssetJobRepository } from 'src/repositories/asset-job.repository.js';
+import { AssetRepository } from 'src/repositories/asset.repository.js';
+import { EventRepository } from 'src/repositories/event.repository.js';
+import { JobRepository } from 'src/repositories/job.repository.js';
+import { LoggingRepository } from 'src/repositories/logging.repository.js';
+import { OcrRepository } from 'src/repositories/ocr.repository.js';
+import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository.js';
+import { SharedLinkRepository } from 'src/repositories/shared-link.repository.js';
+import { StackRepository } from 'src/repositories/stack.repository.js';
+import { StorageRepository } from 'src/repositories/storage.repository.js';
+import { UserRepository } from 'src/repositories/user.repository.js';
+import { DB } from 'src/schema/index.js';
+import { AssetService } from 'src/services/asset.service.js';
+import { newMediumService } from 'test/medium.factory.js';
+import { factory } from 'test/small.factory.js';
+import { getKyselyDB } from 'test/utils.js';
 
 let defaultDatabase: Kysely<DB>;
 
@@ -46,33 +45,16 @@ beforeAll(async () => {
 });
 
 describe(AssetService.name, () => {
-  // Fork: the official mobile app reads asset faces from GET /assets/:id -> people[].
-  // This proves that endpoint returns the viewer's own person on a shared asset,
-  // so the official app shows shared-album faces with no client change.
-  describe('get (shared-album people, fork)', () => {
-    it('returns the viewer own person on a shared asset', async () => {
+  describe('get', () => {
+    it('should not return an asset of another user', async () => {
       const { sut, ctx } = setup();
-      const personRepo = ctx.get(PersonRepository);
-      const { user: owner } = await ctx.newUser();
-      const { user: viewer } = await ctx.newUser();
+      const { user } = await ctx.newUser();
+      const { user: otherUser } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
 
-      const { asset } = await ctx.newAsset({ ownerId: owner.id });
-      const { person: ownerPerson } = await ctx.newPerson({ ownerId: owner.id, name: 'Owner Alice' });
-      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerPerson.id });
-      const { person: viewerPerson } = await ctx.newPerson({ ownerId: viewer.id, name: 'Viewer Alice' });
-      await personRepo.linkFacePerson({ faceId: assetFace.id, personId: viewerPerson.id });
-
-      // Share the asset with the viewer via an album (grants AssetRead access).
-      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
-      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
-
-      const auth = factory.auth({ user: { id: viewer.id } });
-      const result = await sut.get(auth, asset.id);
-      const people = 'people' in result && result.people ? result.people : [];
-      const peopleIds = people.map((person) => person.id);
-      expect(peopleIds).toContain(viewerPerson.id);
-      // The owner's person is never exposed to the viewer.
-      expect(peopleIds).not.toContain(ownerPerson.id);
+      await expect(sut.get(factory.auth({ user: otherUser }), asset.id)).rejects.toThrow(
+        'Not found or no asset.read access',
+      );
     });
   });
 
@@ -365,6 +347,17 @@ describe(AssetService.name, () => {
   });
 
   describe('update', () => {
+    it('should not update an asset of another user', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { user: otherUser } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      await expect(sut.update(factory.auth({ user: otherUser }), asset.id, {})).rejects.toThrow(
+        'Not found or no asset.update access',
+      );
+    });
+
     it('should automatically lock lockable columns', async () => {
       const { sut, ctx } = setup();
       ctx.getMock(JobRepository).queue.mockResolvedValue();

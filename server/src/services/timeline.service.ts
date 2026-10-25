@@ -1,19 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { AuthDto } from 'src/dtos/auth.dto';
-import { TimeBucketAssetDto, TimeBucketDto, TimeBucketsResponseDto } from 'src/dtos/time-bucket.dto';
-import { AssetVisibility, Permission } from 'src/enum';
-import { TimeBucketOptions } from 'src/repositories/asset.repository';
-import { BaseService } from 'src/services/base.service';
-import { requireElevatedPermission } from 'src/utils/access';
-import { getMyPartnerIds } from 'src/utils/asset.util';
-import { forkFeatures } from 'src/utils/fork-features';
+import { AuthDto } from 'src/dtos/auth.dto.js';
+import { TimeBucketAssetDto, TimeBucketDto, TimeBucketsResponseDto } from 'src/dtos/time-bucket.dto.js';
+import { AssetVisibility, Permission } from 'src/enum.js';
+import { TimeBucketOptions } from 'src/repositories/asset.repository.js';
+import { BaseService } from 'src/services/base.service.js';
+import { requireElevatedPermission } from 'src/utils/access.js';
+import { getMyPartnerIds } from 'src/utils/asset.util.js';
 
 @Injectable()
 export class TimelineService extends BaseService {
   async getTimeBuckets(auth: AuthDto, dto: TimeBucketDto): Promise<TimeBucketsResponseDto[]> {
     await this.timeBucketChecks(auth, dto);
     const timeBucketOptions = await this.buildTimeBucketOptions(auth, dto);
-    return await this.assetRepository.getTimeBuckets(timeBucketOptions);
+    return await this.assetRepository.getTimeBuckets(timeBucketOptions, auth);
   }
 
   // pre-jsonified response
@@ -36,18 +35,13 @@ export class TimelineService extends BaseService {
         const partnerIds = await getMyPartnerIds({
           userId: auth.user.id,
           repository: this.partnerRepository,
-          timelineEnabled: true,
+          timelineEnabled: !options.personId || undefined,
         });
         userIds.push(...partnerIds);
       }
     }
 
-    // Fork: when viewing a person's photos, also include shared-album assets so
-    // photos of that person uploaded by others appear in their timeline.
-    const sharedAlbumWithUserId =
-      forkFeatures.sharedFaceRecognition && (dto.personId || dto.petId) ? auth.user.id : undefined;
-
-    return { ...options, userIds, sharedAlbumWithUserId };
+    return { ...options, userIds };
   }
 
   private async timeBucketChecks(auth: AuthDto, dto: TimeBucketDto) {
@@ -79,6 +73,7 @@ export class TimelineService extends BaseService {
       dto.withCoordinates = false;
     }
 
+    // eslint-disable-next-line unicorn/prefer-early-return
     if (dto.withPartners) {
       const isRequestedLocked = dto.visibility === AssetVisibility.Locked;
       const isRequestedArchived = dto.visibility === AssetVisibility.Archive || dto.visibility === undefined;

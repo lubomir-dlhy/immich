@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/immich-app/immich-server:v3.1.0
+ARG BASE_IMAGE=ghcr.io/immich-app/immich-server:v3.3.5
 
 FROM ${BASE_IMAGE}
 
@@ -7,12 +7,18 @@ FROM ${BASE_IMAGE}
 COPY server/dist /usr/src/app/server/dist
 COPY web/build /build/www
 
-# These upstream v3.1 migrations sort before pet migrations that this fork
-# already ran in production. The fork carries them under later timestamps.
+# These upstream migrations sort before pet migrations that this fork already
+# ran in production. The fork carries them under later timestamps.
 RUN rm -f \
       /usr/src/app/server/dist/schema/migrations/1784647658615-AddOAuthBearerTokenToSession.d.ts \
       /usr/src/app/server/dist/schema/migrations/1784647658615-AddOAuthBearerTokenToSession.js \
       /usr/src/app/server/dist/schema/migrations/1784647658615-AddOAuthBearerTokenToSession.js.map \
       /usr/src/app/server/dist/schema/migrations/1784836013770-MinFacePreferenceMigration.d.ts \
       /usr/src/app/server/dist/schema/migrations/1784836013770-MinFacePreferenceMigration.js \
-      /usr/src/app/server/dist/schema/migrations/1784836013770-MinFacePreferenceMigration.js.map
+      /usr/src/app/server/dist/schema/migrations/1784836013770-MinFacePreferenceMigration.js.map \
+      /usr/src/app/server/dist/schema/migrations/1784986754473-ConvertUserPasswordEmptyStringToNull.d.ts \
+      /usr/src/app/server/dist/schema/migrations/1784986754473-ConvertUserPasswordEmptyStringToNull.js \
+      /usr/src/app/server/dist/schema/migrations/1784986754473-ConvertUserPasswordEmptyStringToNull.js.map \
+      /usr/src/app/server/dist/schema/migrations/1784986754474-AlbumDescriptionNullable.d.ts \
+      /usr/src/app/server/dist/schema/migrations/1784986754474-AlbumDescriptionNullable.js \
+      /usr/src/app/server/dist/schema/migrations/1784986754474-AlbumDescriptionNullable.js.map

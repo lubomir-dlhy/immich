@@ -2,24 +2,25 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   AddUsersDto,
   AlbumResponseDto,
+  AlbumStatisticsResponseDto,
   AlbumsAddAssetsDto,
   AlbumsAddAssetsResponseDto,
-  AlbumStatisticsResponseDto,
   CreateAlbumDto,
   GetAlbumsDto,
-  mapAlbum,
   UpdateAlbumDto,
   UpdateAlbumUserDto,
-} from 'src/dtos/album.dto';
-import { BulkIdErrorReason, BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
-import { AuthDto } from 'src/dtos/auth.dto';
-import { MapMarkerResponseDto } from 'src/dtos/map.dto';
-import { AlbumUserRole, Permission } from 'src/enum';
-import { AlbumAssetCount, AlbumInfoOptions } from 'src/repositories/album.repository';
-import { BaseService } from 'src/services/base.service';
-import { addAssets, removeAssets } from 'src/utils/asset.util';
-import { asDateTimeString } from 'src/utils/date';
-import { getPreferences } from 'src/utils/preferences';
+  mapAlbum,
+} from 'src/dtos/album.dto.js';
+import { BulkIdErrorReason, BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto.js';
+import { AuthDto } from 'src/dtos/auth.dto.js';
+import { MapMarkerResponseDto } from 'src/dtos/map.dto.js';
+import { AlbumUserRole, Permission } from 'src/enum.js';
+import { AlbumAssetCount, AlbumInfoOptions } from 'src/repositories/album.repository.js';
+import { BaseService } from 'src/services/base.service.js';
+import { addAssets, removeAssets } from 'src/utils/asset.util.js';
+import { asDateTimeString } from 'src/utils/date.js';
+import { findOrFail } from 'src/utils/misc.js';
+import { getPreferences } from 'src/utils/preferences.js';
 
 @Injectable()
 export class AlbumService extends BaseService {
@@ -133,7 +134,7 @@ export class AlbumService extends BaseService {
       await this.eventRepository.emit('AlbumInvite', { id: album.id, userId, senderName: auth.user.name });
     }
     if (albumUsers.length > 0 && assetIds.length > 0) {
-      await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', albumId: album.id });
+      await this.eventRepository.emit('SharedAssetAccessChanged', { action: 'grant', albumId: album.id });
     }
 
     return mapAlbum(album);
@@ -169,7 +170,7 @@ export class AlbumService extends BaseService {
   async delete(auth: AuthDto, id: string): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.AlbumDelete, ids: [id] });
     await this.albumRepository.delete(id);
-    await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'revoke' });
+    await this.eventRepository.emit('SharedAssetAccessChanged', { action: 'revoke' });
   }
 
   async addAssets(auth: AuthDto, id: string, dto: BulkIdsDto): Promise<BulkIdResponseDto[]> {
@@ -179,7 +180,7 @@ export class AlbumService extends BaseService {
     const results = await addAssets(
       auth,
       { access: this.accessRepository, bulk: this.albumRepository },
-      { parentId: id, assetIds: dto.ids },
+      { parentId: id, assetIds: dto.ids, permission: Permission.AssetShare },
     );
 
     const { id: firstNewAssetId } = results.find(({ success }) => success) || {};
@@ -199,7 +200,7 @@ export class AlbumService extends BaseService {
       await this.eventRepository.emit('AlbumUpdate', { id, userIds, recipientIds });
 
       const addedAssetIds = results.filter(({ success }) => success).map(({ id }) => id);
-      await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', assetIds: addedAssetIds });
+      await this.eventRepository.emit('SharedAssetAccessChanged', { action: 'grant', assetIds: addedAssetIds });
     }
 
     return results;
@@ -258,7 +259,7 @@ export class AlbumService extends BaseService {
 
     await this.albumRepository.addAssetIdsToAlbums(albumAssetValues);
     if (albumAssetValues.length > 0) {
-      await this.eventRepository.emit('SharedFaceAccessChanged', {
+      await this.eventRepository.emit('SharedAssetAccessChanged', {
         action: 'grant',
         assetIds: [...new Set(albumAssetValues.map(({ assetId }) => assetId))],
       });
@@ -293,7 +294,7 @@ export class AlbumService extends BaseService {
       });
     }
     if (removedIds.length > 0) {
-      await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'revoke' });
+      await this.eventRepository.emit('SharedAssetAccessChanged', { action: 'revoke' });
     }
 
     return results;
@@ -326,7 +327,7 @@ export class AlbumService extends BaseService {
       await this.eventRepository.emit('AlbumInvite', { id, userId, senderName: auth.user.name });
     }
     if (userAdded) {
-      await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'grant', albumId: id });
+      await this.eventRepository.emit('SharedAssetAccessChanged', { action: 'grant', albumId: id });
     }
 
     return mapAlbum(await this.findOrFail(id, auth.user.id, { withAssets: true }));
@@ -357,7 +358,7 @@ export class AlbumService extends BaseService {
     }
 
     await this.albumUserRepository.delete({ albumId: id, userId });
-    await this.eventRepository.emit('SharedFaceAccessChanged', { action: 'revoke' });
+    await this.eventRepository.emit('SharedAssetAccessChanged', { action: 'revoke' });
   }
 
   async updateUser(auth: AuthDto, id: string, userId: string, dto: UpdateAlbumUserDto): Promise<void> {
@@ -373,11 +374,7 @@ export class AlbumService extends BaseService {
     await this.albumUserRepository.update({ albumId: id, userId }, { role: dto.role });
   }
 
-  private async findOrFail(id: string, authUserId: string, options: AlbumInfoOptions) {
-    const album = await this.albumRepository.getById(id, options, authUserId);
-    if (!album) {
-      throw new BadRequestException('Album not found');
-    }
-    return album;
+  private findOrFail(id: string, authUserId: string, options: AlbumInfoOptions) {
+    return findOrFail(() => this.albumRepository.getById(id, options, authUserId), 'Album');
   }
 }

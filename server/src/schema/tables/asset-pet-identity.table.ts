@@ -1,6 +1,6 @@
 import { ForeignKeyColumn, Table } from '@immich/sql-tools';
-import { AssetPetTable } from 'src/schema/tables/asset-pet.table';
-import { PetTable } from 'src/schema/tables/pet.table';
+import { AssetPetTable } from 'src/schema/tables/asset-pet.table.js';
+import { PetTable } from 'src/schema/tables/pet.table.js';
 
 /**
  * Per-viewer pet assignments for shared assets.
