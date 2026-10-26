@@ -72,6 +72,7 @@
     },
     [QueueName.PetDetection]: {
       allText: $t('reset'),
+      refreshText: $t('refresh'),
       missingText: $t('missing'),
       disabled: !featureFlags.petRecognition,
     },

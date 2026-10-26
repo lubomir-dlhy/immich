@@ -45,6 +45,12 @@
           {disabled}
         />
         <SettingSwitch
+          title={$t('admin.nightly_tasks_cluster_new_pets_setting')}
+          subtitle={$t('admin.nightly_tasks_cluster_pets_setting_description')}
+          bind:checked={configToEdit.nightlyTasks.clusterNewPets}
+          {disabled}
+        />
+        <SettingSwitch
           title={$t('admin.nightly_tasks_generate_memories_setting')}
           subtitle={$t('admin.nightly_tasks_generate_memories_setting_description')}
           bind:checked={configToEdit.nightlyTasks.generateMemories}

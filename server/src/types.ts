@@ -398,7 +398,7 @@ export type JobItem =
   // Pet Recognition
   | { name: JobName.AssetDetectPetsQueueAll; data: IBaseJob }
   | { name: JobName.AssetDetectPets; data: IEntityJob }
-  | { name: JobName.PetRecognitionQueueAll; data: IBaseJob }
+  | { name: JobName.PetRecognitionQueueAll; data: INightlyJob }
   | { name: JobName.PetRecognition; data: IDeferrableJob }
 
   // Smart Search
@@ -560,6 +560,7 @@ export type MediaLocation = { location: string };
 export interface SystemMetadata extends Record<SystemMetadataKey, Record<string, any>> {
   [SystemMetadataKey.AdminOnboarding]: { isOnboarded: boolean };
   [SystemMetadataKey.FacialRecognitionState]: { lastRun?: string };
+  [SystemMetadataKey.PetRecognitionState]: { lastRun?: string };
   [SystemMetadataKey.License]: { licenseKey: string; activationKey: string; activatedAt: Date };
   [SystemMetadataKey.MaintenanceMode]: MaintenanceModeState;
   [SystemMetadataKey.MediaLocation]: MediaLocation;

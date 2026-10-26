@@ -305,6 +305,10 @@ export class QueueService extends BaseService {
       jobs.push({ name: JobName.FacialRecognitionQueueAll, data: { force: false, nightly: true } });
     }
 
+    if (config.nightlyTasks.clusterNewPets) {
+      jobs.push({ name: JobName.PetRecognitionQueueAll, data: { force: false, nightly: true } });
+    }
+
     await this.jobRepository.queueAll(jobs);
   }
 }

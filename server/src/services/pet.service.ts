@@ -18,7 +18,16 @@ import {
   PetTrackAssignmentDto,
   PetUpdateDto,
 } from 'src/dtos/pet.dto.js';
-import { AssetType, AssetVisibility, JobName, JobStatus, Permission, QueueName, VectorIndex } from 'src/enum.js';
+import {
+  AssetType,
+  AssetVisibility,
+  JobName,
+  JobStatus,
+  Permission,
+  QueueName,
+  SystemMetadataKey,
+  VectorIndex,
+} from 'src/enum.js';
 import { type ArgOf } from 'src/repositories/event.repository.js';
 import { AssetPetTable } from 'src/schema/tables/asset-pet.table.js';
 import { PetSearchTable } from 'src/schema/tables/pet-search.table.js';
@@ -808,16 +817,62 @@ export class PetService extends BaseService {
         await processFrame(preview.path, 0, null);
       }
 
-      await this.petRepository.replaceAssetPets(id, sightings, embeddings, { discardRejected: force === true });
+      // Like faces: detections that still match an existing sighting keep it, along with its pet.
+      const unmatched = new Set(asset.pets.filter(({ isRejected }) => !isRejected || force === true));
+      const trackIds = new Map<string, string>();
+      const matchedIds = new Set<string>();
+      for (const sighting of sightings) {
+        let best: { existing: (typeof asset.pets)[number]; iou: number } | undefined;
+        for (const existing of unmatched) {
+          if (
+            existing.isRejected ||
+            existing.frameTimestampMs !== sighting.frameTimestampMs ||
+            existing.species !== sighting.species
+          ) {
+            continue;
+          }
+          const iou = getIntersectionOverUnion(existing, {
+            boundingBox: {
+              x1: sighting.boundingBoxX1,
+              y1: sighting.boundingBoxY1,
+              x2: sighting.boundingBoxX2,
+              y2: sighting.boundingBoxY2,
+            },
+          });
+          if (iou >= 0.5 && (!best || iou > best.iou)) {
+            best = { existing, iou };
+          }
+        }
+
+        if (!best) {
+          continue;
+        }
+
+        unmatched.delete(best.existing);
+        matchedIds.add(sighting.id);
+        if (!trackIds.has(sighting.trackId)) {
+          trackIds.set(sighting.trackId, best.existing.trackId);
+        }
+      }
+
+      const added = sightings
+        .filter(({ id }) => !matchedIds.has(id))
+        .map((sighting) => ({ ...sighting, trackId: trackIds.get(sighting.trackId) ?? sighting.trackId }));
+      await this.petRepository.refreshAssetPets(
+        id,
+        added,
+        embeddings.filter(({ petAssetId }) => !matchedIds.has(petAssetId)),
+        [...unmatched].map(({ id }) => id),
+      );
       await this.assetRepository.upsertJobStatus({ assetId: id, petsRecognizedAt: new Date() });
       this.websocketRepository.clientSend('on_pet_update', asset.ownerId, {
         assetId: id,
         pets: sightings.length,
       });
 
-      if (sightings.length > 0) {
+      if (added.length > 0) {
         const queuedTrackIds = new Set<string>();
-        const trackRepresentatives = sightings.filter(({ trackId }) => {
+        const trackRepresentatives = added.filter(({ trackId }) => {
           if (queuedTrackIds.has(trackId)) {
             return false;
           }
@@ -839,16 +894,36 @@ export class PetService extends BaseService {
   }
 
   @OnJob({ name: JobName.PetRecognitionQueueAll, queue: QueueName.PetRecognition })
-  async handleQueueRecognizePets({ force }: JobOf<JobName.PetRecognitionQueueAll>): Promise<JobStatus> {
+  async handleQueueRecognizePets({ force, nightly }: JobOf<JobName.PetRecognitionQueueAll>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: false });
     if (!isPetRecognitionEnabled(machineLearning)) {
       return JobStatus.Skipped;
     }
+
+    await this.jobRepository.waitForQueueCompletion(QueueName.ThumbnailGeneration, QueueName.PetDetection);
+
+    if (nightly) {
+      const [state, latestDetection] = await Promise.all([
+        this.systemMetadataRepository.get(SystemMetadataKey.PetRecognitionState),
+        this.petRepository.getLatestDetectionDate(),
+      ]);
+
+      if (state?.lastRun && latestDetection && state.lastRun > latestDetection) {
+        this.logger.debug('Skipping pet recognition nightly since no pet has been detected since the last run');
+        return JobStatus.Skipped;
+      }
+    }
+
+    const { waiting } = await this.jobRepository.getJobCounts(QueueName.PetRecognition);
     if (force) {
       await this.petRepository.resetRecognition();
+    } else if (waiting) {
+      this.logger.debug(`Skipping pet recognition queueing because ${waiting} job(s) are already queued`);
+      return JobStatus.Skipped;
     }
 
     await this.databaseRepository.prewarm(VectorIndex.Pet);
+    const lastRun = new Date().toISOString();
     let jobs: JobItem[] = [];
     const queueSightings = async (sightings: AsyncIterable<{ id: string }>) => {
       for await (const sighting of sightings) {
@@ -866,6 +941,7 @@ export class PetService extends BaseService {
     await queueSightings(this.petRepository.getSightingsForSharedRecognition());
     await this.jobRepository.queueAll(jobs);
     await this.petRepository.cleanupEmptyPets();
+    await this.systemMetadataRepository.set(SystemMetadataKey.PetRecognitionState, { lastRun });
     return JobStatus.Success;
   }
 

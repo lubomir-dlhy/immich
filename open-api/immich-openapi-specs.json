@@ -20190,6 +20190,10 @@
             "description": "Cluster new faces",
             "type": "boolean"
           },
+          "clusterNewPets": {
+            "description": "Cluster new pets",
+            "type": "boolean"
+          },
           "databaseCleanup": {
             "description": "Database cleanup",
             "type": "boolean"
@@ -20214,6 +20218,7 @@
         },
         "required": [
           "clusterNewFaces",
+          "clusterNewPets",
           "databaseCleanup",
           "generateMemories",
           "missingThumbnails",

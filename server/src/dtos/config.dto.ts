@@ -380,6 +380,7 @@ const AdminConfigSchemaWithVisibility = z
         databaseCleanup: configBool.describe('Database cleanup'),
         missingThumbnails: configBool.describe('Missing thumbnails'),
         clusterNewFaces: configBool.describe('Cluster new faces'),
+        clusterNewPets: configBool.describe('Cluster new pets'),
         generateMemories: configBool.describe('Generate memories'),
         syncQuotaUsage: configBool.describe('Sync quota usage'),
       })
@@ -752,6 +753,7 @@ export const defaults = Object.freeze<SystemConfig>({
     syncQuotaUsage: true,
     missingThumbnails: true,
     clusterNewFaces: true,
+    clusterNewPets: true,
   },
   trash: {
     enabled: true,

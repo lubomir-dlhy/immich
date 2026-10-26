@@ -62,20 +62,20 @@ export class PetRepository {
       .executeTakeFirst();
   }
 
-  async replaceAssetPets(
+  async refreshAssetPets(
     assetId: string,
     sightings: Array<Insertable<AssetPetTable> & { id: string }>,
     embeddings: PetSearchTable[],
-    options: { discardRejected: boolean },
+    sightingIdsToRemove: string[],
   ): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
-      let deleteQuery = trx.deleteFrom('asset_pet').where('assetId', '=', assetId);
-      if (!options.discardRejected) {
-        // Automatic processing keeps explicit "not a pet" decisions. A
-        // manual refresh intentionally resets them and reruns the pipeline.
-        deleteQuery = deleteQuery.where('isRejected', '=', false);
+      if (sightingIdsToRemove.length > 0) {
+        await trx
+          .deleteFrom('asset_pet')
+          .where('assetId', '=', assetId)
+          .where('id', 'in', sightingIdsToRemove)
+          .execute();
       }
-      await deleteQuery.execute();
       if (sightings.length > 0) {
         await trx.insertInto('asset_pet').values(sightings).execute();
       }
@@ -83,6 +83,15 @@ export class PetRepository {
         await trx.insertInto('pet_search').values(embeddings).execute();
       }
     });
+  }
+
+  async getLatestDetectionDate(): Promise<string | undefined> {
+    const result = (await this.db
+      .selectFrom('asset_job_status')
+      .select((eb) => sql`${eb.fn.max('asset_job_status.petsRecognizedAt')}::text`.as('latestDate'))
+      .executeTakeFirst()) as { latestDate: string } | undefined;
+
+    return result?.latestDate;
   }
 
   async createSighting(

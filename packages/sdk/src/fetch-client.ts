@@ -291,6 +291,8 @@ export type AdminConfigNewVersionCheckDto = {
 export type AdminConfigNightlyTasksDto = {
     /** Cluster new faces */
     clusterNewFaces: boolean;
+    /** Cluster new pets */
+    clusterNewPets: boolean;
     /** Database cleanup */
     databaseCleanup: boolean;
     /** Generate memories */

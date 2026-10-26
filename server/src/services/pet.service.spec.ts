@@ -1,4 +1,4 @@
-import { AssetType, AssetVisibility, JobName, JobStatus } from 'src/enum.js';
+import { AssetType, AssetVisibility, JobName, JobStatus, QueueName, SystemMetadataKey } from 'src/enum.js';
 import { PetService } from 'src/services/pet.service.js';
 import { ServiceMocks, makeStream, newTestService } from 'test/utils.js';
 
@@ -490,7 +490,7 @@ describe(PetService.name, () => {
     expect(mocks.machineLearning.detectPets).toHaveBeenNthCalledWith(1, firstFrame, petConfig);
     expect(mocks.machineLearning.detectPets).toHaveBeenNthCalledWith(2, middleFrame, petConfig);
     expect(mocks.machineLearning.detectPets).toHaveBeenNthCalledWith(3, lastFrame, petConfig);
-    expect(mocks.pet.replaceAssetPets).toHaveBeenCalledWith(
+    expect(mocks.pet.refreshAssetPets).toHaveBeenCalledWith(
       assetId,
       [
         expect.objectContaining({
@@ -510,7 +510,7 @@ describe(PetService.name, () => {
         { petAssetId: firstSightingId, embedding: detectedPet.embedding },
         { petAssetId: lastSightingId, embedding: detectedPet.embedding },
       ],
-      { discardRejected: false },
+      [],
     );
     expect(mocks.websocket.clientSend).toHaveBeenCalledWith('on_pet_update', sighting.asset.ownerId, {
       assetId,
@@ -630,7 +630,7 @@ describe(PetService.name, () => {
 
     await expect(sut.handleDetectPets({ id: assetId })).resolves.toBe(JobStatus.Success);
 
-    expect(mocks.pet.replaceAssetPets).toHaveBeenCalledWith(assetId, [], [], { discardRejected: false });
+    expect(mocks.pet.refreshAssetPets).toHaveBeenCalledWith(assetId, [], [], []);
     expect(mocks.crypto.randomUUID).not.toHaveBeenCalled();
   });
 
@@ -675,11 +675,11 @@ describe(PetService.name, () => {
 
     await expect(sut.handleDetectPets({ id: assetId, force: true })).resolves.toBe(JobStatus.Success);
 
-    expect(mocks.pet.replaceAssetPets).toHaveBeenCalledWith(
+    expect(mocks.pet.refreshAssetPets).toHaveBeenCalledWith(
       assetId,
       [expect.objectContaining({ id: petAssetId, trackId, species: 'dog' })],
       [{ petAssetId, embedding: detectedPet.embedding }],
-      { discardRejected: true },
+      [sighting.id],
     );
   });
 
@@ -716,16 +716,103 @@ describe(PetService.name, () => {
       ...petConfig,
       minScore: 0.35,
     });
-    expect(mocks.pet.replaceAssetPets).toHaveBeenCalledWith(
+    expect(mocks.pet.refreshAssetPets).toHaveBeenCalledWith(
       assetId,
       [expect.objectContaining({ id: petAssetId, trackId, species: 'dog' })],
       [{ petAssetId, embedding: detectedPet.embedding }],
-      { discardRejected: true },
+      [],
     );
     expect(mocks.job.queueAll).toHaveBeenCalledWith([
       { name: JobName.PetRecognitionQueueAll, data: { force: false } },
       { name: JobName.PetRecognition, data: { id: petAssetId, deferred: false } },
     ]);
+  });
+
+  it('keeps sightings that still match on re-detection and removes the ones that no longer do', async () => {
+    const assetId = sighting.assetId;
+    const kept = { ...sighting, petId: 'pet-1', trackId: 'existing-track', species: 'dog' };
+    const gone = { ...sighting, id: '10000000-0000-4000-8000-000000000099', boundingBoxX1: 600, boundingBoxX2: 900 };
+    const newSightingId = '10000000-0000-4000-8000-000000000031';
+    mocks.pet.getAssetForDetection.mockResolvedValue({
+      id: assetId,
+      ownerId: sighting.asset.ownerId,
+      visibility: AssetVisibility.Timeline,
+      fileCreatedAt: new Date(),
+      type: AssetType.Image,
+      originalPath: '/photos/dog.jpg',
+      duration: null,
+      files: [{ path: '/preview/dog.jpg' }],
+      pets: [kept, gone],
+    } as never);
+    mocks.machineLearning.detectPets.mockResolvedValue({
+      imageWidth: 1000,
+      imageHeight: 800,
+      pets: [
+        {
+          boundingBox: {
+            x1: kept.boundingBoxX1,
+            y1: kept.boundingBoxY1,
+            x2: kept.boundingBoxX2,
+            y2: kept.boundingBoxY2,
+          },
+          embedding: '[0.1,0.2]',
+          score: 0.95,
+          species: 'dog',
+        },
+        { boundingBox: { x1: 0, y1: 500, x2: 100, y2: 700 }, embedding: '[0.3,0.4]', score: 0.9, species: 'cat' },
+      ],
+    });
+    mocks.crypto.randomUUID
+      .mockReturnValueOnce('new-track-1')
+      .mockReturnValueOnce('matched-sighting')
+      .mockReturnValueOnce('new-track-2')
+      .mockReturnValueOnce(newSightingId);
+
+    await expect(sut.handleDetectPets({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.pet.refreshAssetPets).toHaveBeenCalledWith(
+      assetId,
+      [expect.objectContaining({ id: newSightingId, trackId: 'new-track-2', species: 'cat' })],
+      [{ petAssetId: newSightingId, embedding: '[0.3,0.4]' }],
+      [gone.id],
+    );
+    expect(mocks.job.queueAll).toHaveBeenCalledWith([
+      { name: JobName.PetRecognitionQueueAll, data: { force: false } },
+      { name: JobName.PetRecognition, data: { id: newSightingId, deferred: false } },
+    ]);
+  });
+
+  it('waits for pet detection and skips queueing recognition when jobs are already waiting', async () => {
+    mocks.job.getJobCounts.mockResolvedValue({ waiting: 3 } as never);
+
+    await expect(sut.handleQueueRecognizePets({ force: false })).resolves.toBe(JobStatus.Skipped);
+
+    expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledWith(
+      QueueName.ThumbnailGeneration,
+      QueueName.PetDetection,
+    );
+    expect(mocks.pet.getAllUnassigned).not.toHaveBeenCalled();
+  });
+
+  it('skips the nightly pet recognition when nothing was detected since the last run', async () => {
+    mocks.systemMetadata.get.mockResolvedValue({ lastRun: '2026-10-26T02:00:00.000Z' });
+    mocks.pet.getLatestDetectionDate.mockResolvedValue('2026-10-25T20:00:00.000Z');
+
+    await expect(sut.handleQueueRecognizePets({ force: false, nightly: true })).resolves.toBe(JobStatus.Skipped);
+
+    expect(mocks.pet.getAllUnassigned).not.toHaveBeenCalled();
+  });
+
+  it('records the last pet recognition run', async () => {
+    mocks.job.getJobCounts.mockResolvedValue({ waiting: 0 } as never);
+    mocks.pet.getAllUnassigned.mockReturnValue(makeStream([]));
+    mocks.pet.getSightingsForSharedRecognition.mockReturnValue(makeStream([]));
+
+    await expect(sut.handleQueueRecognizePets({ force: false })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.PetRecognitionState, {
+      lastRun: expect.any(String),
+    });
   });
 
   it('does not use the fallback score during automatic pet detection', async () => {
@@ -747,7 +834,7 @@ describe(PetService.name, () => {
 
     expect(mocks.machineLearning.detectPets).toHaveBeenCalledTimes(1);
     expect(mocks.machineLearning.detectPets).toHaveBeenCalledWith('/preview/dog.jpg', petConfig);
-    expect(mocks.pet.replaceAssetPets).toHaveBeenCalledWith(assetId, [], [], { discardRejected: false });
+    expect(mocks.pet.refreshAssetPets).toHaveBeenCalledWith(assetId, [], [], []);
   });
 
   it('merges a duplicate pet identity into the selected pet', async () => {
