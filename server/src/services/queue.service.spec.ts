@@ -23,11 +23,13 @@ describe(QueueService.name, () => {
     it('should update concurrency', () => {
       sut.onConfigUpdate({ newConfig: defaults, oldConfig: {} as SystemConfig });
 
-      expect(mocks.job.setConcurrency).toHaveBeenCalledTimes(19);
+      expect(mocks.job.setConcurrency).toHaveBeenCalledTimes(21);
       expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(5, QueueName.FacialRecognition, 1);
-      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(7, QueueName.DuplicateDetection, 1);
-      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(8, QueueName.BackgroundTask, 5);
-      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(9, QueueName.StorageTemplateMigration, 1);
+      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(6, QueueName.PetDetection, 2);
+      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(7, QueueName.PetRecognition, 1);
+      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(9, QueueName.DuplicateDetection, 1);
+      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(10, QueueName.BackgroundTask, 5);
+      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(11, QueueName.StorageTemplateMigration, 1);
     });
   });
 
@@ -71,6 +73,8 @@ describe(QueueService.name, () => {
         [QueueName.VideoConversion]: expected,
         [QueueName.FaceDetection]: expected,
         [QueueName.FacialRecognition]: expected,
+        [QueueName.PetDetection]: expected,
+        [QueueName.PetRecognition]: expected,
         [QueueName.Sidecar]: expected,
         [QueueName.Library]: expected,
         [QueueName.Notification]: expected,
@@ -195,6 +199,24 @@ describe(QueueService.name, () => {
       await sut.runCommandLegacy(QueueName.FacialRecognition, { command: QueueCommand.Start, force: false });
 
       expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FacialRecognitionQueueAll, data: { force: false } });
+    });
+
+    it('should handle a start pet detection command', async () => {
+      mocks.job.isActive.mockResolvedValue(false);
+      mocks.job.getJobCounts.mockResolvedValue(factory.queueStatistics());
+
+      await sut.runCommandLegacy(QueueName.PetDetection, { command: QueueCommand.Start, force: false });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.AssetDetectPetsQueueAll, data: { force: false } });
+    });
+
+    it('should handle a start pet recognition command', async () => {
+      mocks.job.isActive.mockResolvedValue(false);
+      mocks.job.getJobCounts.mockResolvedValue(factory.queueStatistics());
+
+      await sut.runCommandLegacy(QueueName.PetRecognition, { command: QueueCommand.Start, force: true });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.PetRecognitionQueueAll, data: { force: true } });
     });
 
     it('should handle a start backup database command', async () => {

@@ -70,6 +70,16 @@
       missingText: $t('missing'),
       disabled: !featureFlags.facialRecognition,
     },
+    [QueueName.PetDetection]: {
+      allText: $t('reset'),
+      missingText: $t('missing'),
+      disabled: !featureFlags.petRecognition,
+    },
+    [QueueName.PetRecognition]: {
+      allText: $t('reset'),
+      missingText: $t('missing'),
+      disabled: !featureFlags.petRecognition,
+    },
     [QueueName.Ocr]: {
       allText: $t('all'),
       missingText: $t('missing'),
@@ -103,6 +113,21 @@
           }
           break;
         }
+        break;
+      }
+      case QueueName.PetDetection:
+      case QueueName.PetRecognition: {
+        if (dto.force) {
+          const prompt =
+            name === QueueName.PetDetection
+              ? $t('admin.confirm_reprocess_all_pets')
+              : $t('admin.confirm_recluster_all_pets');
+          const confirmed = await modalManager.showDialog({ prompt });
+          if (!confirmed) {
+            return;
+          }
+        }
+        break;
       }
       // no default
     }

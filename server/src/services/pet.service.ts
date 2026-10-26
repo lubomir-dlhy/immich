@@ -11,7 +11,6 @@ import {
   PetClusterResponseDto,
   PetMergeDto,
   PetReassignDto,
-  PetRecognitionRunDto,
   PetRejectAppearancesDto,
   PetRejectAppearancesResponseDto,
   PetResponseDto,
@@ -645,22 +644,7 @@ export class PetService extends BaseService {
     return { rejected };
   }
 
-  async runRecognition(_: AuthDto, dto: PetRecognitionRunDto): Promise<void> {
-    if (dto.recluster) {
-      await this.jobRepository.queue({
-        name: JobName.PetRecognitionQueueAll,
-        data: { force: true },
-      });
-      return;
-    }
-
-    await this.jobRepository.queue({
-      name: JobName.AssetDetectPetsQueueAll,
-      data: { force: dto.force },
-    });
-  }
-
-  @OnJob({ name: JobName.AssetDetectPetsQueueAll, queue: QueueName.FaceDetection })
+  @OnJob({ name: JobName.AssetDetectPetsQueueAll, queue: QueueName.PetDetection })
   async handleQueueDetectPets({ force }: JobOf<JobName.AssetDetectPetsQueueAll>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: false });
     if (!isPetRecognitionEnabled(machineLearning)) {
@@ -685,7 +669,7 @@ export class PetService extends BaseService {
     return JobStatus.Success;
   }
 
-  @OnJob({ name: JobName.AssetDetectPets, queue: QueueName.FaceDetection })
+  @OnJob({ name: JobName.AssetDetectPets, queue: QueueName.PetDetection })
   async handleDetectPets({ id, force }: JobOf<JobName.AssetDetectPets>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: true });
     if (!isPetRecognitionEnabled(machineLearning)) {
@@ -854,7 +838,7 @@ export class PetService extends BaseService {
     return asset.type === AssetType.Video ? this.videoDetectionLock.acquire('pet-video-detection', detect) : detect();
   }
 
-  @OnJob({ name: JobName.PetRecognitionQueueAll, queue: QueueName.FacialRecognition })
+  @OnJob({ name: JobName.PetRecognitionQueueAll, queue: QueueName.PetRecognition })
   async handleQueueRecognizePets({ force }: JobOf<JobName.PetRecognitionQueueAll>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: false });
     if (!isPetRecognitionEnabled(machineLearning)) {
@@ -885,7 +869,7 @@ export class PetService extends BaseService {
     return JobStatus.Success;
   }
 
-  @OnJob({ name: JobName.PetRecognition, queue: QueueName.FacialRecognition })
+  @OnJob({ name: JobName.PetRecognition, queue: QueueName.PetRecognition })
   async handleRecognizePet({ id, deferred }: JobOf<JobName.PetRecognition>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: true });
     if (!isPetRecognitionEnabled(machineLearning)) {

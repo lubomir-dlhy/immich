@@ -11208,56 +11208,6 @@
         "x-immich-state": "Alpha"
       }
     },
-    "/pets/recognition": {
-      "post": {
-        "description": "Queue missing or forced pet detection and recognition for the library.",
-        "operationId": "runPetRecognition",
-        "parameters": [],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PetRecognitionRunDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          },
-          {
-            "api_key": []
-          }
-        ],
-        "summary": "Run pet recognition",
-        "tags": [
-          "People"
-        ],
-        "x-immich-admin-only": true,
-        "x-immich-history": [
-          {
-            "version": "v3",
-            "state": "Added"
-          },
-          {
-            "version": "v3",
-            "state": "Alpha"
-          }
-        ],
-        "x-immich-permission": "queue.update",
-        "x-immich-state": "Alpha"
-      }
-    },
     "/pets/{id}": {
       "get": {
         "description": "Retrieve a pet owned by the current user.",
@@ -19998,6 +19948,9 @@
           "ocr": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
           },
+          "petDetection": {
+            "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
+          },
           "search": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
           },
@@ -20027,6 +19980,7 @@
           "migration",
           "notifications",
           "ocr",
+          "petDetection",
           "search",
           "sidecar",
           "smartSearch",
@@ -27028,20 +26982,6 @@
         ],
         "type": "object"
       },
-      "PetRecognitionRunDto": {
-        "properties": {
-          "force": {
-            "default": false,
-            "type": "boolean"
-          },
-          "recluster": {
-            "default": false,
-            "description": "Rebuild pet identities from existing embeddings while preserving named pet anchors",
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
       "PetRejectAppearancesDto": {
         "properties": {
           "assetIds": {
@@ -27819,6 +27759,8 @@
           "videoConversion",
           "faceDetection",
           "facialRecognition",
+          "petDetection",
+          "petRecognition",
           "smartSearch",
           "duplicateDetection",
           "backgroundTask",
@@ -27984,6 +27926,12 @@
           "ocr": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
+          "petDetection": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
+          "petRecognition": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
           "search": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
@@ -28019,6 +27967,8 @@
           "migration",
           "notifications",
           "ocr",
+          "petDetection",
+          "petRecognition",
           "search",
           "sidecar",
           "smartSearch",
@@ -29532,6 +29482,10 @@
             "description": "Whether password login is enabled",
             "type": "boolean"
           },
+          "petRecognition": {
+            "description": "Whether pet recognition is enabled",
+            "type": "boolean"
+          },
           "realtimeTranscoding": {
             "description": "Whether real-time transcoding is enabled",
             "type": "boolean"
@@ -29568,6 +29522,7 @@
           "oauthAutoLaunch",
           "ocr",
           "passwordLogin",
+          "petRecognition",
           "realtimeTranscoding",
           "reverseGeocoding",
           "search",

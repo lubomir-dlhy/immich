@@ -443,15 +443,6 @@ describe(PetService.name, () => {
     );
   });
 
-  it('queues a label-preserving recluster from existing pet embeddings', async () => {
-    await sut.runRecognition({} as never, { force: false, recluster: true });
-
-    expect(mocks.job.queue).toHaveBeenCalledWith({
-      name: JobName.PetRecognitionQueueAll,
-      data: { force: true },
-    });
-  });
-
   it('detects pets in timed video frames and stores each frame segment', async () => {
     const assetId = sighting.assetId;
     const trackId = '10000000-0000-4000-8000-000000000010';

@@ -9,7 +9,6 @@ import {
   PetClusterResponseDto,
   PetMergeDto,
   PetReassignDto,
-  PetRecognitionRunDto,
   PetRejectAppearancesDto,
   PetRejectAppearancesResponseDto,
   PetResponseDto,
@@ -208,17 +207,5 @@ export class PetController {
     @Body() dto: PetRejectAppearancesDto,
   ): Promise<PetRejectAppearancesResponseDto> {
     return this.service.rejectAppearances(auth, id, dto);
-  }
-
-  @Post('recognition')
-  @Authenticated({ permission: Permission.QueueUpdate, admin: true })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @Endpoint({
-    summary: 'Run pet recognition',
-    description: 'Queue missing or forced pet detection and recognition for the library.',
-    history: new HistoryBuilder().added('v3').alpha('v3'),
-  })
-  runPetRecognition(@Auth() auth: AuthDto, @Body() dto: PetRecognitionRunDto): Promise<void> {
-    return this.service.runRecognition(auth, dto);
   }
 }

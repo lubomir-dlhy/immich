@@ -185,15 +185,3 @@ const PetTrackParamsSchema = z.object({
 });
 
 export class PetTrackParamsDto extends createZodDto(PetTrackParamsSchema) {}
-
-const PetRecognitionRunSchema = z
-  .object({
-    force: z.boolean().default(false),
-    recluster: z
-      .boolean()
-      .default(false)
-      .describe('Rebuild pet identities from existing embeddings while preserving named pet anchors'),
-  })
-  .meta({ id: 'PetRecognitionRunDto' });
-
-export class PetRecognitionRunDto extends createZodDto(PetRecognitionRunSchema) {}

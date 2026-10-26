@@ -173,6 +173,7 @@ export type AdminConfigJobDto = {
     migration: AdminConfigJobSettingsDto;
     notifications: AdminConfigJobSettingsDto;
     ocr: AdminConfigJobSettingsDto;
+    petDetection: AdminConfigJobSettingsDto;
     search: AdminConfigJobSettingsDto;
     sidecar: AdminConfigJobSettingsDto;
     smartSearch: AdminConfigJobSettingsDto;
@@ -1802,6 +1803,8 @@ export type QueuesResponseLegacyDto = {
     migration: QueueResponseLegacyDto;
     notifications: QueueResponseLegacyDto;
     ocr: QueueResponseLegacyDto;
+    petDetection: QueueResponseLegacyDto;
+    petRecognition: QueueResponseLegacyDto;
     search: QueueResponseLegacyDto;
     sidecar: QueueResponseLegacyDto;
     smartSearch: QueueResponseLegacyDto;
@@ -2234,11 +2237,6 @@ export type PetClusterPointDto = {
 export type PetClusterResponseDto = {
     points: PetClusterPointDto[];
     recognitionThreshold: number;
-};
-export type PetRecognitionRunDto = {
-    force?: boolean;
-    /** Rebuild pet identities from existing embeddings while preserving named pet anchors */
-    recluster?: boolean;
 };
 export type PetUpdateDto = {
     isHidden?: boolean;
@@ -2986,6 +2984,8 @@ export type ServerFeaturesDto = {
     ocr: boolean;
     /** Whether password login is enabled */
     passwordLogin: boolean;
+    /** Whether pet recognition is enabled */
+    petRecognition: boolean;
     /** Whether real-time transcoding is enabled */
     realtimeTranscoding: boolean;
     /** Whether reverse geocoding is enabled */
@@ -6608,18 +6608,6 @@ export function getPetClusters(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
- * Run pet recognition
- */
-export function runPetRecognition({ petRecognitionRunDto }: {
-    petRecognitionRunDto: PetRecognitionRunDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText("/pets/recognition", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: petRecognitionRunDto
-    })));
-}
-/**
  * Get a pet
  */
 export function getPet({ id }: {
@@ -8734,6 +8722,8 @@ export enum QueueName {
     VideoConversion = "videoConversion",
     FaceDetection = "faceDetection",
     FacialRecognition = "facialRecognition",
+    PetDetection = "petDetection",
+    PetRecognition = "petRecognition",
     SmartSearch = "smartSearch",
     DuplicateDetection = "duplicateDetection",
     BackgroundTask = "backgroundTask",

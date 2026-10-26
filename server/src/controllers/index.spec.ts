@@ -35,7 +35,6 @@ const ADMIN_ROUTES = new Set([
   'POST libraries',
   'POST libraries/:id/scan',
   'POST libraries/:id/validate',
-  'POST pets/recognition',
   'POST system-metadata/admin-onboarding',
   'PUT jobs/:name',
   'PUT libraries/:id',

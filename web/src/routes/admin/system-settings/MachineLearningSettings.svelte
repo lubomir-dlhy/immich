@@ -8,9 +8,7 @@
   import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
-  import { handleError } from '$lib/utils/handle-error';
-  import { runPetRecognition } from '@immich/sdk';
-  import { Button, IconButton, toastManager } from '@immich/ui';
+  import { Button, IconButton } from '@immich/ui';
   import { mdiPlus, mdiTrashCanOutline } from '@mdi/js';
   import { isEqual } from 'lodash-es';
   import { t } from 'svelte-i18n';
@@ -19,30 +17,6 @@
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
   let configToEdit = $state(systemConfigManager.cloneValue());
-  let isRunningPetRecognition = $state(false);
-
-  const handleRunPetRecognition = async ({ force = false, recluster = false } = {}) => {
-    if (isRunningPetRecognition) {
-      return;
-    }
-    isRunningPetRecognition = true;
-    try {
-      await runPetRecognition({ petRecognitionRunDto: { force, recluster } });
-      toastManager.primary(
-        $t(
-          recluster
-            ? 'admin.pet_recognition_recluster_queued'
-            : force
-              ? 'admin.pet_recognition_all_queued'
-              : 'admin.pet_recognition_missing_queued',
-        ),
-      );
-    } catch (error) {
-      handleError(error, $t('admin.pet_recognition_queue_failed'));
-    } finally {
-      isRunningPetRecognition = false;
-    }
-  };
 </script>
 
 <div class="mt-2">
@@ -369,35 +343,6 @@
             isEdited={configToEdit.machineLearning.petRecognition.minPets !==
               config.machineLearning.petRecognition.minPets}
           />
-
-          <div class="flex flex-wrap justify-end gap-2 pt-2">
-            <Button
-              size="small"
-              shape="round"
-              disabled={isRunningPetRecognition || !configToEdit.machineLearning.petRecognition.enabled}
-              onclick={() => void handleRunPetRecognition()}
-            >
-              {$t('admin.pet_recognition_run_missing')}
-            </Button>
-            <Button
-              size="small"
-              shape="round"
-              color="secondary"
-              disabled={isRunningPetRecognition || !configToEdit.machineLearning.petRecognition.enabled}
-              onclick={() => void handleRunPetRecognition({ recluster: true })}
-            >
-              {$t('admin.pet_recognition_recluster')}
-            </Button>
-            <Button
-              size="small"
-              shape="round"
-              color="danger"
-              disabled={isRunningPetRecognition || !configToEdit.machineLearning.petRecognition.enabled}
-              onclick={() => void handleRunPetRecognition({ force: true })}
-            >
-              {$t('admin.pet_recognition_reprocess_all')}
-            </Button>
-          </div>
         </div>
       </SettingAccordion>
 
