@@ -80,7 +80,7 @@
     "fluent-ffmpeg": "^2.1.2",
     "generic-pool": "^3.9.0",
     "geo-tz": "^8.0.0",
-    "handlebars": "^4.7.8",
+    "handlebars": "^4.7.10",
     "helmet": "^8.1.0",
     "ioredis": "^5.8.2",
     "jose": "^6.0.0",
@@ -91,13 +91,13 @@
     "lodash-es": "^4.17.21",
     "luxon": "^3.4.2",
     "mnemonist": "^0.40.3",
-    "multer": "^2.0.2",
+    "multer": "^2.5.0",
     "nest-commander": "^3.16.0",
     "nestjs-cls": "^6.0.0",
     "nestjs-kysely": "3.1.4",
     "nestjs-otel": "^8.0.0",
     "nestjs-zod": "^5.5.0",
-    "nodemailer": "^9.0.0",
+    "nodemailer": "^10.1.4",
     "openid-client": "^6.3.3",
     "pg": "^8.11.3",
     "picomatch": "^4.0.2",
@@ -118,7 +118,7 @@
     "ua-parser-js": "^2.0.0",
     "uuid": "^14.0.0",
     "validator": "^13.12.0",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",
