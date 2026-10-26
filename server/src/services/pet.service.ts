@@ -27,14 +27,14 @@ import { BaseService } from 'src/services/base.service.js';
 import { JobItem, type JobOf } from 'src/types.js';
 import { isPetRecognitionEnabled } from 'src/utils/misc.js';
 
-const PET_VIDEO_FRAME_INTERVAL_MS = 5000;
+const PET_VIDEO_FRAME_INTERVAL_MS = 1000;
 const PET_VIDEO_MAX_FRAMES = 120;
 const PET_VIDEO_END_GUARD_MS = 500;
 // Temporal matching is deliberately looser than global identity clustering:
 // consecutive frames already provide a strong time constraint, while pose and
 // motion blur can move AnimalID embeddings substantially within one video.
 const PET_VIDEO_TRACK_MAX_DISTANCE = 0.55;
-const PET_VIDEO_TRACK_MAX_GAP_MS = PET_VIDEO_FRAME_INTERVAL_MS * 2;
+const PET_VIDEO_TRACK_MIN_GAP_MS = 10_000;
 // Manual refresh is an explicit request to look again. If the configured pass
 // finds nothing, retry at a conservative lower threshold before concluding
 // that the asset has no pets. Automatic ingestion keeps the configured score.
@@ -141,12 +141,15 @@ const getIntersectionOverUnion = (
   return intersection / Math.max(leftArea + rightArea - intersection, Number.EPSILON);
 };
 
+const getPetVideoFrameIntervalMs = (durationMs: number | null) =>
+  Math.max(PET_VIDEO_FRAME_INTERVAL_MS, Math.ceil((durationMs ?? 0) / PET_VIDEO_MAX_FRAMES / 1000) * 1000);
+
 const getPetVideoFrameTimes = (durationMs: number | null): number[] => {
   if (!durationMs || durationMs <= 0) {
     return [0];
   }
 
-  const intervalMs = Math.max(PET_VIDEO_FRAME_INTERVAL_MS, Math.ceil(durationMs / PET_VIDEO_MAX_FRAMES / 1000) * 1000);
+  const intervalMs = getPetVideoFrameIntervalMs(durationMs);
   return Array.from({ length: Math.ceil(durationMs / intervalMs) }, (_, index) => index * intervalMs).filter(
     (timestampMs) => timestampMs === 0 || timestampMs <= durationMs - PET_VIDEO_END_GUARD_MS,
   );
@@ -698,6 +701,7 @@ export class PetService extends BaseService {
       const sightings: Array<Insertable<AssetPetTable> & { id: string }> = [];
       const embeddings: PetSearchTable[] = [];
       const videoTracks: PetVideoTrack[] = [];
+      const trackMaxGapMs = Math.max(PET_VIDEO_TRACK_MIN_GAP_MS, getPetVideoFrameIntervalMs(asset.duration) * 2);
       const processFrame = async (input: string | Buffer, frameTimestampMs: number, frameDurationMs: number | null) => {
         let detectionConfig = machineLearning.petRecognition;
         let result = await this.machineLearningRepository.detectPets(input, detectionConfig);
@@ -727,7 +731,7 @@ export class PetService extends BaseService {
 
         const detectionEmbeddings = detections.map(({ embedding }) => parseEmbedding(embedding));
         const recentTracks = videoTracks.filter(
-          ({ lastTimestampMs }) => frameTimestampMs - lastTimestampMs <= PET_VIDEO_TRACK_MAX_GAP_MS,
+          ({ lastTimestampMs }) => frameTimestampMs - lastTimestampMs <= trackMaxGapMs,
         );
         const candidates = detections
           .flatMap((detection, detectionIndex) =>

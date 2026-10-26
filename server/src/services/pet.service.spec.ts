@@ -474,7 +474,7 @@ describe(PetService.name, () => {
       fileCreatedAt: new Date(),
       type: AssetType.Video,
       originalPath: '/videos/dogs.mp4',
-      duration: 12_000,
+      duration: 2600,
       files: [{ path: '/preview/dogs.jpg' }],
       pets: [],
     } as never);
@@ -494,8 +494,8 @@ describe(PetService.name, () => {
     await expect(sut.handleDetectPets({ id: assetId })).resolves.toBe(JobStatus.Success);
 
     expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(1, '/videos/dogs.mp4', 0);
-    expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(2, '/videos/dogs.mp4', 5000);
-    expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(3, '/videos/dogs.mp4', 10_000);
+    expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(2, '/videos/dogs.mp4', 1000);
+    expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(3, '/videos/dogs.mp4', 2000);
     expect(mocks.machineLearning.detectPets).toHaveBeenNthCalledWith(1, firstFrame, petConfig);
     expect(mocks.machineLearning.detectPets).toHaveBeenNthCalledWith(2, middleFrame, petConfig);
     expect(mocks.machineLearning.detectPets).toHaveBeenNthCalledWith(3, lastFrame, petConfig);
@@ -506,13 +506,13 @@ describe(PetService.name, () => {
           id: firstSightingId,
           trackId,
           frameTimestampMs: 0,
-          frameDurationMs: 5000,
+          frameDurationMs: 1000,
         }),
         expect.objectContaining({
           id: lastSightingId,
           trackId,
-          frameTimestampMs: 10_000,
-          frameDurationMs: 2000,
+          frameTimestampMs: 2000,
+          frameDurationMs: 600,
         }),
       ],
       [
@@ -540,7 +540,7 @@ describe(PetService.name, () => {
       fileCreatedAt: new Date(),
       type: AssetType.Video,
       originalPath: '/videos/dogs.mp4',
-      duration: 10_010,
+      duration: 5243,
       files: [{ path: '/preview/dogs.jpg' }],
       pets: [],
     } as never);
@@ -549,9 +549,31 @@ describe(PetService.name, () => {
 
     await expect(sut.handleDetectPets({ id: assetId })).resolves.toBe(JobStatus.Success);
 
-    expect(mocks.media.extractVideoFrame).toHaveBeenCalledTimes(2);
-    expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(1, '/videos/dogs.mp4', 0);
-    expect(mocks.media.extractVideoFrame).toHaveBeenNthCalledWith(2, '/videos/dogs.mp4', 5000);
+    expect(mocks.media.extractVideoFrame.mock.calls.map(([, timestampMs]) => timestampMs)).toEqual([
+      0, 1000, 2000, 3000, 4000,
+    ]);
+  });
+
+  it('spreads frames over long videos', async () => {
+    const assetId = sighting.assetId;
+    mocks.pet.getAssetForDetection.mockResolvedValue({
+      id: assetId,
+      ownerId: sighting.asset.ownerId,
+      visibility: AssetVisibility.Timeline,
+      fileCreatedAt: new Date(),
+      type: AssetType.Video,
+      originalPath: '/videos/dogs.mp4',
+      duration: 300_000,
+      files: [{ path: '/preview/dogs.jpg' }],
+      pets: [],
+    } as never);
+    mocks.media.extractVideoFrame.mockResolvedValue(Buffer.from('frame'));
+    mocks.machineLearning.detectPets.mockResolvedValue({ imageWidth: 1000, imageHeight: 800, pets: [] });
+
+    await expect(sut.handleDetectPets({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.media.extractVideoFrame).toHaveBeenCalledTimes(100);
+    expect(mocks.media.extractVideoFrame).toHaveBeenLastCalledWith('/videos/dogs.mp4', 297_000);
   });
 
   it('keeps detections from earlier frames when a later video frame cannot be extracted', async () => {
