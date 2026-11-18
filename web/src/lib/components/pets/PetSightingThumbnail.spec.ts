@@ -1,6 +1,6 @@
+import PetSightingThumbnail from '#lib/components/pets/PetSightingThumbnail.svelte';
 import type { AssetPetResponseDto } from '@immich/sdk';
-import { render } from '@testing-library/svelte';
-import PetSightingThumbnail from './PetSightingThumbnail.svelte';
+import { render } from 'vitest-browser-svelte';
 
 const sighting: AssetPetResponseDto = {
   id: 'sighting-id',
@@ -20,8 +20,8 @@ const sighting: AssetPetResponseDto = {
 };
 
 describe('PetSightingThumbnail', () => {
-  it('uses the supplied image preview for still-image sightings', () => {
-    const { baseElement } = render(PetSightingThumbnail, {
+  it('uses the supplied image preview for still-image sightings', async () => {
+    const { baseElement } = await render(PetSightingThumbnail, {
       sighting,
       name: 'Dog',
       imageUrl: '/api/assets/asset-id/thumbnail?size=preview',
@@ -32,8 +32,8 @@ describe('PetSightingThumbnail', () => {
     );
   });
 
-  it('uses the timestamp-aware sighting endpoint by default', () => {
-    const { baseElement } = render(PetSightingThumbnail, { sighting, name: 'Dog' });
+  it('uses the timestamp-aware sighting endpoint by default', async () => {
+    const { baseElement } = await render(PetSightingThumbnail, { sighting, name: 'Dog' });
 
     expect(baseElement.querySelector('image')?.getAttribute('href')).toBe('/api/pets/assets/sighting-id/thumbnail');
   });
