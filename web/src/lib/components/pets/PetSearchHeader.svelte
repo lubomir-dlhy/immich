@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import PetMergeModal from '$lib/modals/PetMergeModal.svelte';
-  import { Route } from '$lib/route';
-  import { handleError } from '$lib/utils/handle-error';
-  import { getPet, getPets, Species, updatePet, type PetResponseDto } from '@immich/sdk';
+  import PetMergeModal from '#lib/modals/PetMergeModal.svelte';
+  import { Route } from '#lib/route.ts';
+  import { handleError } from '#lib/utils/handle-error.ts';
+  import { Species, getPet, getPets, updatePet, type PetResponseDto } from '@immich/sdk';
   import { Icon, LoadingSpinner, modalManager } from '@immich/ui';
   import { mdiCallMerge, mdiPaw, mdiViewGridOutline } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { goto } from '$app/navigation';
   import PetThumbnail from './PetThumbnail.svelte';
 
   type Props = {

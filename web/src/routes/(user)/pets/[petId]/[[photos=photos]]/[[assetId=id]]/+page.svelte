@@ -1,22 +1,20 @@
 <script lang="ts">
-  import { afterNavigate, goto } from '$app/navigation';
-  import { page } from '$app/state';
-  import PetThumbnail from '$lib/components/pets/PetThumbnail.svelte';
-  import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
-  import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
-  import ControlAppBar from '$lib/components/shared-components/ControlAppBar.svelte';
-  import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
-  import FavoriteAction from '$lib/components/timeline/actions/FavoriteAction.svelte';
-  import SelectAllAssets from '$lib/components/timeline/actions/SelectAllAction.svelte';
-  import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
-  import Timeline from '$lib/components/timeline/Timeline.svelte';
-  import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
-  import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
-  import PetMergeModal from '$lib/modals/PetMergeModal.svelte';
-  import PetReassignModal from '$lib/modals/PetReassignModal.svelte';
-  import { Route } from '$lib/route';
-  import { getAssetBulkActions } from '$lib/services/asset.service';
-  import { handleError } from '$lib/utils/handle-error';
+  import PetThumbnail from '#lib/components/pets/PetThumbnail.svelte';
+  import ControlAppBar from '#lib/components/shared-components/ControlAppBar.svelte';
+  import ButtonContextMenu from '#lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
+  import MenuOption from '#lib/components/shared-components/context-menu/MenuOption.svelte';
+  import AssetSelectControlBar from '#lib/components/timeline/AssetSelectControlBar.svelte';
+  import Timeline from '#lib/components/timeline/Timeline.svelte';
+  import DownloadAction from '#lib/components/timeline/actions/DownloadAction.svelte';
+  import FavoriteAction from '#lib/components/timeline/actions/FavoriteAction.svelte';
+  import SelectAllAssets from '#lib/components/timeline/actions/SelectAllAction.svelte';
+  import { assetMultiSelectManager } from '#lib/managers/asset-multi-select-manager.svelte.ts';
+  import { TimelineManager } from '#lib/managers/timeline-manager/timeline-manager.svelte.ts';
+  import PetMergeModal from '#lib/modals/PetMergeModal.svelte';
+  import PetReassignModal from '#lib/modals/PetReassignModal.svelte';
+  import { Route } from '#lib/route.ts';
+  import { getAssetBulkActions } from '#lib/services/asset.service.ts';
+  import { handleError } from '#lib/utils/handle-error.ts';
   import { AssetVisibility, Species, getPets, updatePet, type PetResponseDto } from '@immich/sdk';
   import {
     ActionButton,
@@ -29,6 +27,8 @@
   import { mdiArrowLeft, mdiCallMerge, mdiCat, mdiDog, mdiDotsVertical, mdiEyeOffOutline, mdiImageMove } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { afterNavigate, goto } from '$app/navigation';
+  import { page } from '$app/state';
   import type { PageData } from './$types';
 
   interface Props {

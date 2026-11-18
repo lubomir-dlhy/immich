@@ -9,6 +9,7 @@ const withEffectiveFlags = (dto: UserConfigDto) => {
   if (!machineLearning.enabled) {
     machineLearning.clip.enabled = false;
     machineLearning.facialRecognition.enabled = false;
+    machineLearning.petRecognition.enabled = false;
     machineLearning.ocr.enabled = false;
   }
 

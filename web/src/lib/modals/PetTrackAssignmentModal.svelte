@@ -1,24 +1,24 @@
 <script lang="ts">
-  import PetSightingThumbnail from '$lib/components/pets/PetSightingThumbnail.svelte';
-  import PetThumbnail from '$lib/components/pets/PetThumbnail.svelte';
-  import { eventManager } from '$lib/managers/event-manager.svelte';
-  import { petManager } from '$lib/stores/pet.svelte';
-  import { handleError } from '$lib/utils/handle-error';
-  import { normalizeSearchString } from '$lib/utils/string-utils';
+  import PetSightingThumbnail from '#lib/components/pets/PetSightingThumbnail.svelte';
+  import PetThumbnail from '#lib/components/pets/PetThumbnail.svelte';
+  import { eventManager } from '#lib/managers/event-manager.svelte.ts';
+  import { petManager } from '#lib/stores/pet.svelte.ts';
+  import { handleError } from '#lib/utils/handle-error.ts';
+  import { normalizeSearchString } from '#lib/utils/string-utils.ts';
   import {
-    assignTracks,
-    getPets,
-    getTrackSuggestions,
-    Species,
-    type AssetPetResponseDto,
-    type PetResponseDto,
-    type PetSuggestionDto,
-    type PetTrackAssignmentDto,
     PetTrackTargetExisting,
     PetTrackTargetNew,
     PetTrackTargetRejected,
     PetTrackTargetRestore,
     PetTrackTargetUnassigned,
+    Species,
+    assignTracks,
+    getPets,
+    getTrackSuggestions,
+    type AssetPetResponseDto,
+    type PetResponseDto,
+    type PetSuggestionDto,
+    type PetTrackAssignmentDto,
   } from '@immich/sdk';
   import { Button, Input, LoadingSpinner, Modal, ModalBody, toastManager } from '@immich/ui';
   import { onMount } from 'svelte';

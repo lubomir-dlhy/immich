@@ -1,6 +1,6 @@
 <script lang="ts">
-  import PetThumbnail from '$lib/components/pets/PetThumbnail.svelte';
-  import { handleError } from '$lib/utils/handle-error';
+  import PetThumbnail from '#lib/components/pets/PetThumbnail.svelte';
+  import { handleError } from '#lib/utils/handle-error.ts';
   import { reassignPetSightings, type PetResponseDto } from '@immich/sdk';
   import { FormModal, Icon, toastManager } from '@immich/ui';
   import { mdiImageMove, mdiPawOutline } from '@mdi/js';

@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { focusOutside } from '$lib/actions/focus-outside';
-  import PetThumbnail from '$lib/components/pets/PetThumbnail.svelte';
-  import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
-  import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
-  import { Route } from '$lib/route';
-  import { handleError } from '$lib/utils/handle-error';
+  import { focusOutside } from '#lib/actions/focus-outside.ts';
+  import PetThumbnail from '#lib/components/pets/PetThumbnail.svelte';
+  import ButtonContextMenu from '#lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
+  import MenuOption from '#lib/components/shared-components/context-menu/MenuOption.svelte';
+  import { Route } from '#lib/route.ts';
+  import { handleError } from '#lib/utils/handle-error.ts';
   import { Species, updatePet, type PetResponseDto } from '@immich/sdk';
   import { mdiCallMerge, mdiDotsVertical, mdiEyeOff } from '@mdi/js';
   import { t } from 'svelte-i18n';
