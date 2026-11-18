@@ -32,9 +32,9 @@ export interface SearchUserIdOptions {
   libraryId?: string | null;
   userIds?: string[];
   /**
-   * Fork: when set, also include assets shared with this user via albums
-   * (in addition to the owner/partner assets matched by `userIds`).
-   */
+  Fork: when set, also include assets shared with this user via albums
+  (in addition to the owner/partner assets matched by `userIds`).
+  */
   sharedAlbumWithUserId?: string;
 }
 

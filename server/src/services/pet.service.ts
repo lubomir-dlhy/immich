@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import AsyncLock from 'async-lock';
 import { Insertable } from 'kysely';
-import type { MachineLearningConfig } from 'src/dtos/config.dto.js';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants.js';
 import { OnEvent, OnJob } from 'src/decorators.js';
 import { AuthDto } from 'src/dtos/auth.dto.js';
+import type { MachineLearningConfig } from 'src/dtos/config.dto.js';
 import {
   AssetPetCreateDto,
   AssetPetResponseDto,
@@ -946,7 +946,7 @@ export class PetService extends BaseService {
   }
 
   @OnJob({ name: JobName.PetRecognition, queue: QueueName.PetRecognition })
-  async handleRecognizePet({ id, deferred }: JobOf<JobName.PetRecognition>): Promise<JobStatus> {
+  async handleRecognizePet({ id, deferred = false }: JobOf<JobName.PetRecognition>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: true });
     if (!isPetRecognitionEnabled(machineLearning)) {
       return JobStatus.Skipped;
@@ -967,7 +967,7 @@ export class PetService extends BaseService {
 
       const embedding =
         (await this.petRepository.getTrackEmbedding(sighting.assetId, sighting.trackId)) ?? sightingEmbedding;
-      return this.recognizePetSighting(sighting, embedding, deferred ?? false, machineLearning);
+      return this.recognizePetSighting(sighting, embedding, deferred, machineLearning);
     });
   }
 
