@@ -375,10 +375,10 @@ export class SearchService extends BaseService {
   }
 
   /**
-   * Fork: opt the viewer's own user id into shared-album inclusion so search
-   * results also span photos others shared with them via albums. Gated by the
-   * `sharedAlbumSearch` fork flag (default on).
-   */
+  Fork: opt the viewer's own user id into shared-album inclusion so search
+  results also span photos others shared with them via albums. Gated by the
+  `sharedAlbumSearch` fork flag (default on).
+  */
   private sharedAlbumOption(auth: AuthDto): { sharedAlbumWithUserId?: string } {
     return forkFeatures.sharedAlbumSearch ? { sharedAlbumWithUserId: auth.user.id } : {};
   }
