@@ -1,31 +1,30 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import OnEvents from '$lib/components/OnEvents.svelte';
-  import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
-  import { eventManager } from '$lib/managers/event-manager.svelte';
-  import PetSightingThumbnail from '$lib/components/pets/PetSightingThumbnail.svelte';
-  import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
-  import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
-  import PetMergeModal from '$lib/modals/PetMergeModal.svelte';
-  import PetTrackAssignmentModal from '$lib/modals/PetTrackAssignmentModal.svelte';
-  import { Route } from '$lib/route';
-  import { petManager } from '$lib/stores/pet.svelte';
-  import { getAssetMediaUrl } from '$lib/utils';
-  import { handleError } from '$lib/utils/handle-error';
+  import OnEvents from '#lib/components/OnEvents.svelte';
+  import PetSightingThumbnail from '#lib/components/pets/PetSightingThumbnail.svelte';
+  import ButtonContextMenu from '#lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
+  import MenuOption from '#lib/components/shared-components/context-menu/MenuOption.svelte';
+  import { assetViewerManager } from '#lib/managers/asset-viewer-manager.svelte.ts';
+  import { eventManager } from '#lib/managers/event-manager.svelte.ts';
+  import PetMergeModal from '#lib/modals/PetMergeModal.svelte';
+  import PetTrackAssignmentModal from '#lib/modals/PetTrackAssignmentModal.svelte';
+  import { Route } from '#lib/route.ts';
+  import { petManager } from '#lib/stores/pet.svelte.ts';
+  import { getAssetMediaUrl } from '#lib/utils.ts';
+  import { handleError } from '#lib/utils/handle-error.ts';
   import {
     AssetMediaSize,
     AssetTypeEnum,
-    assignTracks,
-    getPets,
-    Species,
-    type AssetPetResponseDto,
-    type AssetResponseDto,
-    unassignAssetPet,
     PetTrackTargetRejected,
     PetTrackTargetRestore,
     PetTrackTargetSpecies,
+    Species,
+    assignTracks,
+    getPets,
+    unassignAssetPet,
+    type AssetPetResponseDto,
+    type AssetResponseDto,
   } from '@immich/sdk';
-  import { Icon, IconButton, LoadingSpinner, modalManager, Text, toastManager } from '@immich/ui';
+  import { Icon, IconButton, LoadingSpinner, Text, modalManager, toastManager } from '@immich/ui';
   import {
     mdiCallMerge,
     mdiCat,
@@ -40,6 +39,7 @@
   } from '@mdi/js';
   import { onMount, tick } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { goto } from '$app/navigation';
 
   type Props = {
     asset: AssetResponseDto;
