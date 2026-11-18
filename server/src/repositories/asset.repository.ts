@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  expressionBuilder,
   sql,
   type ExpressionBuilder,
   type Insertable,
@@ -173,6 +174,15 @@ const withBoundingBox = <T>(qb: SelectQueryBuilder<DB, 'asset' | 'asset_exif', T
   return withLatitude.where((eb) =>
     eb.or([eb('asset_exif.longitude', '>=', west), eb('asset_exif.longitude', '<=', east)]),
   );
+};
+
+// Mirrors TimelineService's rule for other users' assets: timeline-visible only, no trash or favorite filters.
+const includesSharedAlbumAssets = (options: TimeBucketOptions) =>
+  !!(options.personId || options.petId) && !options.isTrashed && options.isFavorite === undefined;
+
+const sharedAlbumTimelineAsset = (userId: string) => {
+  const eb = expressionBuilder<DB, 'asset'>();
+  return eb.and([inSharedAlbum(userId, 'asset.id'), eb('asset.visibility', '=', AssetVisibility.Timeline)]);
 };
 
 @Injectable()
@@ -795,8 +805,8 @@ export class AssetRepository {
             qb.where((eb) => {
               // TODO this should become a shared `hasAccess` style helper once implement sharing in more places
               const isOwner = eb('asset.ownerId', '=', anyUuid(options.userIds!));
-              return options.personId || options.petId
-                ? eb.or([isOwner, inSharedAlbum(auth.user.id, 'asset.id')])
+              return includesSharedAlbumAssets(options)
+                ? eb.or([isOwner, sharedAlbumTimelineAsset(auth.user.id)])
                 : isOwner;
             }),
           )
@@ -895,8 +905,8 @@ export class AssetRepository {
           .$if(!!options.userIds, (qb) =>
             qb.where((eb) => {
               const isOwner = eb('asset.ownerId', '=', anyUuid(options.userIds!));
-              return options.personId || options.petId
-                ? eb.or([isOwner, inSharedAlbum(auth.user.id, 'asset.id')])
+              return includesSharedAlbumAssets(options)
+                ? eb.or([isOwner, sharedAlbumTimelineAsset(auth.user.id)])
                 : isOwner;
             }),
           )
