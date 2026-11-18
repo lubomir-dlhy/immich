@@ -101,6 +101,39 @@ describe(AssetRepository.name, () => {
     });
   });
 
+  describe('getTimeBuckets', () => {
+    it('should only include shared-album assets of other users in an unfiltered person timeline', async () => {
+      const { ctx, sut } = setup();
+      const { user: viewer } = await ctx.newUser();
+      const { user: owner } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const { person } = await ctx.newPerson({ ownerId: viewer.id });
+      const personGroupId = person.personGroupId!;
+
+      const newSharedAsset = async (dto: Partial<Insertable<AssetTable>>) => {
+        const { asset } = await ctx.newAsset({ ownerId: owner.id, localDateTime: new Date('1970-02-12'), ...dto });
+        await ctx.newExif({ assetId: asset.id, make: 'Canon' });
+        await ctx.newAssetFace({ assetId: asset.id, personGroupId });
+        return asset;
+      };
+      const timelineAsset = await newSharedAsset({});
+      const archivedAsset = await newSharedAsset({ visibility: AssetVisibility.Archive });
+      const trashedAsset = await newSharedAsset({ deletedAt: new Date(), isFavorite: true });
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [
+        timelineAsset.id,
+        archivedAsset.id,
+        trashedAsset.id,
+      ]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id });
+
+      const options = { userIds: [viewer.id], personId: personGroupId };
+      await expect(sut.getTimeBuckets(options, auth)).resolves.toEqual([{ count: 1, timeBucket: '1970-02-01' }]);
+      await expect(sut.getTimeBuckets({ ...options, isTrashed: true }, auth)).resolves.toEqual([]);
+      await expect(sut.getTimeBuckets({ ...options, isFavorite: true }, auth)).resolves.toEqual([]);
+      await expect(sut.getTimeBuckets({ ...options, visibility: AssetVisibility.Archive }, auth)).resolves.toEqual([]);
+    });
+  });
+
   describe('getTimeBucket', () => {
     it('should order assets by local day first and fileCreatedAt within each day', async () => {
       const { ctx, sut } = setup();
