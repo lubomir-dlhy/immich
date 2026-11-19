@@ -359,6 +359,10 @@
       videoPlayer?.pause();
     }
   });
+
+  // The time is only refreshed on HLS fragment decode by default,
+  // so manually emit events on seek to update it immediately.
+  const onSeeking = (event: Event) => event.currentTarget?.dispatchEvent(new Event('timeupdate'));
 </script>
 
 <svelte:body
@@ -421,6 +425,7 @@
             oncanplay={(e: Event) => handleCanPlay(e.currentTarget as HTMLVideoElement)}
             onloadedmetadata={() => (hasLoadedMetadata = true)}
             onended={onVideoEnded}
+            onseeking={onSeeking}
             ontimeupdate={(e: Event) =>
               assetViewerManager.setVideoTime((e.currentTarget as HTMLVideoElement).currentTime)}
             onplaying={(e: Event) => {
@@ -448,6 +453,7 @@
             oncanplay={(e) => handleCanPlay(e.currentTarget)}
             onloadedmetadata={() => (hasLoadedMetadata = true)}
             onended={onVideoEnded}
+            onseeking={onSeeking}
             ontimeupdate={(e) => assetViewerManager.setVideoTime(e.currentTarget.currentTime)}
             onplaying={(e) => {
               if (hasFocused) {
