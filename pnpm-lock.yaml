@@ -449,7 +449,7 @@ importers:
         specifier: ^8.58.0
         version: 8.72.0(@typescript/typescript6@6.0.2)(eslint@10.13.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)
       vite:
-        specifier: ^8.0.0
+        specifier: ^8.3.3
         version: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.102.0)(terser@5.49.0)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^5.0.0
@@ -538,7 +538,7 @@ importers:
         specifier: ^7.7.1
         version: 7.8.0
       vite:
-        specifier: ^8.0.16
+        specifier: ^8.3.3
         version: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.102.0)(terser@5.49.0)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^5.0.0
@@ -686,7 +686,7 @@ importers:
         specifier: ^8.0.0
         version: 8.1.10
       handlebars:
-        specifier: ^4.7.8
+        specifier: ^4.7.10
         version: 4.7.10
       helmet:
         specifier: ^8.1.0
@@ -719,7 +719,7 @@ importers:
         specifier: ^0.40.3
         version: 0.40.6
       multer:
-        specifier: ^2.0.2
+        specifier: ^2.5.0
         version: 2.5.0
       nest-commander:
         specifier: ^3.16.0
@@ -737,7 +737,7 @@ importers:
         specifier: ^5.5.0
         version: 5.5.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/swagger@12.0.3(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@12.2.0)(@typescript/typescript6@6.0.2)(reflect-metadata@0.2.2))(rxjs@7.8.2)(zod@4.4.3)
       nodemailer:
-        specifier: ^10.0.0
+        specifier: ^10.1.4
         version: 10.2.1
       openid-client:
         specifier: ^6.3.3
@@ -1007,6 +1007,12 @@ importers:
       '@zoom-image/svelte':
         specifier: ^0.3.0
         version: 0.3.11(svelte@5.57.2(@typescript-eslint/types@8.72.0))
+      d3-selection:
+        specifier: ^3.0.0
+        version: 3.0.0
+      d3-zoom:
+        specifier: ^3.0.0
+        version: 3.0.0
       dom-to-image:
         specifier: ^2.6.0
         version: 2.6.0
@@ -1020,7 +1026,7 @@ importers:
         specifier: ^0.5.0
         version: 0.5.0
       handlebars:
-        specifier: ^4.7.8
+        specifier: ^4.7.10
         version: 4.7.10
       hash-wasm:
         specifier: ^4.12.0
@@ -1131,6 +1137,12 @@ importers:
       '@types/chromecast-caf-sender':
         specifier: ^1.0.11
         version: 1.0.11
+      '@types/d3-selection':
+        specifier: ^3.0.11
+        version: 3.0.11
+      '@types/d3-zoom':
+        specifier: ^3.0.8
+        version: 3.0.8
       '@types/dom-to-image':
         specifier: ^2.6.7
         version: 2.6.7
@@ -1222,7 +1234,7 @@ importers:
         specifier: 8.72.0
         version: 8.72.0(@typescript/typescript6@6.0.2)(eslint@10.13.0(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)
       vite:
-        specifier: ^8.0.12
+        specifier: ^8.3.3
         version: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.102.0)(terser@5.49.0)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^5.0.0
