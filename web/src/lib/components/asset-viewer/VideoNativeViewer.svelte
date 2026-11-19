@@ -345,7 +345,7 @@
       return { width: 0, height: 0 };
     }
 
-    const natural = getNaturalSize(videoPlayer);
+    const natural = getNaturalSize(isHlsElement(videoPlayer) ? videoPlayer.nativeEl : videoPlayer);
     if (natural.width <= 0 || natural.height <= 0) {
       return { width: 0, height: 0 };
     }
@@ -542,7 +542,7 @@
             <rect width="100%" height="100%" fill="rgba(0,0,0,0.28)" mask={`url(#pet-video-focus-${assetId})`} />
           </svg>
           {#each highlightedPetBoxes as box, index (box.id)}
-            {@const pet = assetViewerManager.highlightedFaces[index]}
+            {const pet = $derived(assetViewerManager.highlightedFaces[index])}
             <div
               class="absolute rounded-lg border-3 border-white bg-transparent shadow-[0_0_0_2px_rgba(0,0,0,0.45),0_8px_28px_rgba(0,0,0,0.28)]"
               style:top={`${box.top}px`}

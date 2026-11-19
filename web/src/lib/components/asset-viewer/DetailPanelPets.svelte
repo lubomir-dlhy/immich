@@ -416,7 +416,7 @@
       {#if videoPetSummaries.length > 0}
         <div class="mt-2 space-y-2">
           {#each displayedVideoPetSummaries as summary, index (summary.id)}
-            {@const isNamed = Boolean(summary.representative.pet?.name)}
+            {const isNamed = $derived(Boolean(summary.representative.pet?.name))}
             <div
               role="group"
               class="group flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2 transition-colors hover:bg-gray-50 data-[selected=true]:border-immich-primary data-[selected=true]:bg-immich-primary/10 data-[selected=true]:ring-2 data-[selected=true]:ring-immich-primary/40 dark:border-gray-700 dark:hover:bg-gray-800 dark:data-[selected=true]:border-immich-dark-primary dark:data-[selected=true]:bg-immich-dark-primary/10 dark:data-[selected=true]:ring-immich-dark-primary/40"
@@ -517,14 +517,18 @@
         <div class="relative mt-3 h-5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
           {#each videoPetSummaries as summary, index (summary.id)}
             {#each [...summary.trackIds] as trackId (trackId)}
-              {@const trackSightings = summary.sightings.filter((sighting) => sighting.trackId === trackId)}
-              {@const startMs = Math.min(...trackSightings.map(({ frameTimestampMs }) => frameTimestampMs))}
-              {@const endMs = Math.max(
-                ...trackSightings.map(
-                  ({ frameTimestampMs, frameDurationMs }) => frameTimestampMs + (frameDurationMs ?? 1),
+              {const trackSightings = $derived(summary.sightings.filter((sighting) => sighting.trackId === trackId))}
+              {const startMs = $derived(Math.min(...trackSightings.map(({ frameTimestampMs }) => frameTimestampMs)))}
+              {const endMs = $derived(
+                Math.max(
+                  ...trackSightings.map(
+                    ({ frameTimestampMs, frameDurationMs }) => frameTimestampMs + (frameDurationMs ?? 1),
+                  ),
                 ),
               )}
-              {@const firstSighting = trackSightings.find(({ frameTimestampMs }) => frameTimestampMs === startMs)!}
+              {const firstSighting = $derived(
+                trackSightings.find(({ frameTimestampMs }) => frameTimestampMs === startMs)!,
+              )}
               <button
                 type="button"
                 class="absolute top-1 h-3 min-w-1 rounded-full transition-all hover:top-0.5 hover:h-4 {index % 3 === 0
@@ -557,11 +561,11 @@
     {:else}
       <div class="mt-2 grid {unhiddenSightings.length <= 6 ? 'grid-cols-3 gap-3' : 'grid-cols-4 gap-2'}">
         {#each unhiddenSightings as sighting (sighting.id)}
-          {@const boxWidth = Math.max(1, sighting.boundingBoxX2 - sighting.boundingBoxX1)}
-          {@const boxHeight = Math.max(1, sighting.boundingBoxY2 - sighting.boundingBoxY1)}
-          {@const displayName = sighting.pet?.name || $t('unrecognized_pet')}
-          {@const highlightedRegion = { ...sighting, name: displayName }}
-          {@const isHighlighted = assetViewerManager.highlightedFaces.some(({ id }) => id === sighting.id)}
+          {const boxWidth = $derived(Math.max(1, sighting.boundingBoxX2 - sighting.boundingBoxX1))}
+          {const boxHeight = $derived(Math.max(1, sighting.boundingBoxY2 - sighting.boundingBoxY1))}
+          {const displayName = $derived(sighting.pet?.name || $t('unrecognized_pet'))}
+          {const highlightedRegion = $derived({ ...sighting, name: displayName })}
+          {const isHighlighted = $derived(assetViewerManager.highlightedFaces.some(({ id }) => id === sighting.id))}
           <div
             class="group relative min-w-0"
             role="group"
@@ -614,7 +618,7 @@
                   onClick={() => void editPhotoSighting(sighting)}
                 />
                 {#if isOwner}
-                  {@const correctedSpecies = sighting.species === Species.Dog ? Species.Cat : Species.Dog}
+                  {const correctedSpecies = $derived(sighting.species === Species.Dog ? Species.Cat : Species.Dog)}
                   <MenuOption
                     icon={correctedSpecies === Species.Dog ? mdiDog : mdiCat}
                     text={correctedSpecies === Species.Dog ? $t('mark_as_dog') : $t('mark_as_cat')}
