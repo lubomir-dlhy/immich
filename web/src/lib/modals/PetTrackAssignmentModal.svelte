@@ -54,8 +54,9 @@
     pets
       .filter(({ id, isHidden }) => id !== currentPet?.id && !isHidden && !suggestionIds.has(id))
       .filter((pet) => pet.species === sighting.species)
-      .filter((pet) =>
-        searchTerm ? normalizeSearchString(pet.name || pet.species).includes(normalizeSearchString(searchTerm)) : true,
+      .filter(
+        (pet) =>
+          !searchTerm || normalizeSearchString(pet.name || pet.species).includes(normalizeSearchString(searchTerm)),
       )
       .slice(0, 40),
   );
@@ -214,8 +215,8 @@
         <p class="mt-4 mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">{$t('suggestions')}</p>
         <div class="grid grid-cols-3 gap-2">
           {#each suggestions as suggestion (suggestion.pet.id)}
-            {@const pet = suggestion.pet}
-            {@const matchPercentage = getMatchPercentage(suggestion.distance)}
+            {const pet = $derived(suggestion.pet)}
+            {const matchPercentage = $derived(getMatchPercentage(suggestion.distance))}
             <button
               type="button"
               class="relative min-w-0 rounded-xl p-1.5 text-center hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-immich-primary dark:hover:bg-gray-800"

@@ -399,7 +399,7 @@
               {$t('recognition_threshold')} · {data.clusterMap.recognitionThreshold.toFixed(3)}
             </text>
             {#each selectedNeighbors as neighbor (neighbor.point!.id)}
-              {@const neighborPosition = positionFor(neighbor.point)}
+              {const neighborPosition = $derived(positionFor(neighbor.point))}
               <line
                 x1={width / 2}
                 y1={height / 2}
@@ -424,9 +424,9 @@
           {/if}
 
           {#each renderedPoints as point (point.id)}
-            {@const isSelected = point.id === selectedId}
-            {@const position = positionFor(point)}
-            {@const nodeRadius = radius(point.assetCount) + (isSelected ? 5 : 1)}
+            {const isSelected = $derived(point.id === selectedId)}
+            {const position = $derived(positionFor(point))}
+            {const nodeRadius = $derived(radius(point.assetCount) + (isSelected ? 5 : 1))}
             <g
               transform={`translate(${position.x},${position.y}) scale(${semanticScale})`}
               class="cursor-pointer outline-none"
