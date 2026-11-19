@@ -139,6 +139,7 @@ describe(ServerService.name, () => {
         facialRecognition: true,
         petRecognition: true,
         importFaces: false,
+        backups: false,
         map: true,
         reverseGeocoding: true,
         oauth: false,

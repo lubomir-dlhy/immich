@@ -13,6 +13,7 @@ import { DatabaseBackupService } from 'src/services/database-backup.service.js';
 import { DatabaseService } from 'src/services/database.service.js';
 import { DownloadService } from 'src/services/download.service.js';
 import { DuplicateService } from 'src/services/duplicate.service.js';
+import { FutoBackupsService } from 'src/services/futo-backups.service.js';
 import { HlsService } from 'src/services/hls.service.js';
 import { IntegrityService } from 'src/services/integrity.service.js';
 import { JobService } from 'src/services/job.service.js';
@@ -26,6 +27,7 @@ import { NotificationAdminService } from 'src/services/notification-admin.servic
 import { NotificationService } from 'src/services/notification.service.js';
 import { OcrService } from 'src/services/ocr.service.js';
 import { PartnerService } from 'src/services/partner.service.js';
+import { PasskeyService } from 'src/services/passkey.service.js';
 import { PersonService } from 'src/services/person.service.js';
 import { PetService } from 'src/services/pet.service.js';
 import { PluginService } from 'src/services/plugin.service.js';
@@ -68,6 +70,7 @@ export const services = [
   DatabaseService,
   DownloadService,
   DuplicateService,
+  FutoBackupsService,
   IntegrityService,
   HlsService,
   JobService,
@@ -82,6 +85,7 @@ export const services = [
   OcrService,
   ClusterGroupService,
   PartnerService,
+  PasskeyService,
   PersonService,
   PetService,
   PluginService,
