@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/immich-app/immich-server:v3.3.5
+ARG BASE_IMAGE=ghcr.io/immich-app/immich-server:v3.4.2
 
 FROM ${BASE_IMAGE}
 
