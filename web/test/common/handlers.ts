@@ -93,6 +93,7 @@ export const createHandlers = (data: MockData): Handlers => {
 
     updatePeople: ({ body }) => ({ json: data.updatePeople(body.people) }),
     getFaces: () => ({ json: [] }),
+    getAssetPets: () => ({ json: [] }),
     createFace: () => ({ status: 201 }),
     getAllPeople: () => {
       const people = data.getPeople();
