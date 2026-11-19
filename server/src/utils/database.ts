@@ -337,6 +337,11 @@ export function inSharedAlbum(userId: string, assetId: 'asset.id' | 'asset_face.
   );
 }
 
+export function sharedAlbumSearchAsset(userId: string) {
+  const eb = expressionBuilder<DB, 'asset'>();
+  return eb.and([inSharedAlbum(userId, 'asset.id'), eb('asset.deletedAt', 'is', null)]);
+}
+
 export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: string[]) {
   return qb.innerJoin(
     (eb) =>
@@ -531,8 +536,8 @@ export function searchAssetBuilderLegacy(kysely: Kysely<DB>, options: AssetSearc
       qb.where((eb) => {
         const ownerMatch = eb('asset.ownerId', '=', anyUuid(options.userIds!));
         // Fork: also surface assets shared with the viewer via albums.
-        return options.sharedAlbumWithUserId
-          ? eb.or([ownerMatch, inSharedAlbum(options.sharedAlbumWithUserId, 'asset.id')])
+        return options.sharedAlbumWithUserId && options.isFavorite === undefined
+          ? eb.or([ownerMatch, sharedAlbumSearchAsset(options.sharedAlbumWithUserId)])
           : ownerMatch;
       }),
     )
@@ -844,11 +849,12 @@ function branchPredicates(eb: AssetExpressionBuilder, branch: SearchFilterBranch
 export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuilderV3Options, scope: AssetSearchScope) {
   const filter = options.filter ?? {};
   const branches = filter.or ?? [];
+  const usesFavoriteFilter = !!filter.isFavorite || branches.some((branch) => !!branch.isFavorite);
   const ownershipPredicate = (eb: AssetExpressionBuilder) => {
     const isOwner = eb('asset.ownerId', '=', anyUuid(scope.userIds));
     // Fork: also surface assets shared with the viewer via albums.
-    return scope.sharedAlbumWithUserId
-      ? eb.or([isOwner, inSharedAlbum(scope.sharedAlbumWithUserId, 'asset.id')])
+    return scope.sharedAlbumWithUserId && !usesFavoriteFilter
+      ? eb.or([isOwner, sharedAlbumSearchAsset(scope.sharedAlbumWithUserId)])
       : isOwner;
   };
   // search universe: own+partner assets unless album-confined, which searches the albums instead;

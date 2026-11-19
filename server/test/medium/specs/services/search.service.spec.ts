@@ -263,6 +263,27 @@ describe(SearchService.name, () => {
       expect(ids).not.toContain(otherAlbumAsset.id);
       expect(ids).not.toContain(privateAsset.id);
     });
+
+    it('does not expose trashed or favorite state of album-shared assets owned by others', async () => {
+      const { sut, ctx } = setup();
+      const { user: viewer } = await ctx.newUser();
+      const { user: owner } = await ctx.newUser();
+      const { asset: trashedAsset } = await ctx.newAsset({ ownerId: owner.id, deletedAt: new Date() });
+      const { asset: favoriteAsset } = await ctx.newAsset({ ownerId: owner.id, isFavorite: true });
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [trashedAsset.id, favoriteAsset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer });
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const search = async (dto: Omit<Parameters<typeof sut.searchMetadata>[1], 'size'>) => {
+        const { assets } = await sut.searchMetadata(auth, { size: 100, ...dto });
+        return assets.items.map((asset) => asset.id);
+      };
+
+      expect(await search({})).toEqual([favoriteAsset.id]);
+      expect(await search({ withDeleted: true })).not.toContain(trashedAsset.id);
+      expect(await search({ isFavorite: true })).toEqual([]);
+      expect(await search({ filter: { isFavorite: { eq: true } } })).toEqual([]);
+      expect(await search({ filter: { or: [{ isFavorite: { eq: true } }] } })).toEqual([]);
+    });
   });
 
   describe('getSearchSuggestions', () => {
