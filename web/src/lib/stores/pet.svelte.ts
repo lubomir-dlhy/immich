@@ -1,6 +1,6 @@
+import { assetCacheManager } from '#lib/managers/AssetCacheManager.svelte.ts';
+import { CancellableTask } from '#lib/utils/cancellable-task.ts';
 import type { AssetPetResponseDto } from '@immich/sdk';
-import { assetCacheManager } from '$lib/managers/AssetCacheManager.svelte';
-import { CancellableTask } from '$lib/utils/cancellable-task';
 
 class PetManager {
   #data = $state<AssetPetResponseDto[]>([]);

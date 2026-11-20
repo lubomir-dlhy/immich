@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { assetCacheManager } from '$lib/managers/AssetCacheManager.svelte';
+  import { assetCacheManager } from '#lib/managers/AssetCacheManager.svelte.ts';
   import type { AssetPetResponseDto } from '@immich/sdk';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';

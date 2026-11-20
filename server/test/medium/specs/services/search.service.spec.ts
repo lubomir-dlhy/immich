@@ -18,6 +18,7 @@ let defaultDatabase: Kysely<DB>;
 
 const unitVector = (index: number) => JSON.stringify(Array.from({ length: 512 }, (_, i) => (i === index ? 1 : 0)));
 
+// eslint-disable-next-line unicorn/no-unnecessary-parameters
 const setup = (db?: Kysely<DB>) => {
   return newMediumService(SearchService, {
     database: db || defaultDatabase,
@@ -122,6 +123,31 @@ describe(SearchService.name, () => {
       const result = await sut.searchStatistics(auth, { visibility: AssetVisibility.Locked });
 
       expect(result).toEqual({ total: 0 });
+    });
+
+    it('should not return locked assets of partner in elevated session without a visibility filter', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { user: partner } = await ctx.newUser();
+
+      await ctx.newPartner({ sharedById: partner.id, sharedWithId: user.id });
+
+      await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      await ctx.newAsset({ ownerId: partner.id, visibility: AssetVisibility.Locked });
+      await ctx.newAsset({ ownerId: partner.id });
+
+      const auth = factory.auth({ user: { id: user.id }, session: { hasElevatedPermission: true } });
+
+      await expect(sut.searchStatistics(auth, {})).resolves.toEqual({ total: 2 });
+
+      const response = await sut.searchMetadata(auth, { size: 250, withStacked: false });
+      expect(response.assets.items.map(({ ownerId, visibility }) => ({ ownerId, visibility }))).toEqual(
+        expect.arrayContaining([
+          { ownerId: user.id, visibility: AssetVisibility.Locked },
+          { ownerId: partner.id, visibility: AssetVisibility.Timeline },
+        ]),
+      );
+      expect(response.assets.items).toHaveLength(2);
     });
   });
 
@@ -236,6 +262,27 @@ describe(SearchService.name, () => {
       expect(ids).toContain(sharedAsset.id);
       expect(ids).not.toContain(otherAlbumAsset.id);
       expect(ids).not.toContain(privateAsset.id);
+    });
+
+    it('does not expose trashed or favorite state of album-shared assets owned by others', async () => {
+      const { sut, ctx } = setup();
+      const { user: viewer } = await ctx.newUser();
+      const { user: owner } = await ctx.newUser();
+      const { asset: trashedAsset } = await ctx.newAsset({ ownerId: owner.id, deletedAt: new Date() });
+      const { asset: favoriteAsset } = await ctx.newAsset({ ownerId: owner.id, isFavorite: true });
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [trashedAsset.id, favoriteAsset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer });
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const search = async (dto: Omit<Parameters<typeof sut.searchMetadata>[1], 'size'>) => {
+        const { assets } = await sut.searchMetadata(auth, { size: 100, ...dto });
+        return assets.items.map((asset) => asset.id);
+      };
+
+      expect(await search({})).toEqual([favoriteAsset.id]);
+      expect(await search({ withDeleted: true })).not.toContain(trashedAsset.id);
+      expect(await search({ isFavorite: true })).toEqual([]);
+      expect(await search({ filter: { isFavorite: { eq: true } } })).toEqual([]);
+      expect(await search({ filter: { or: [{ isFavorite: { eq: true } }] } })).toEqual([]);
     });
   });
 

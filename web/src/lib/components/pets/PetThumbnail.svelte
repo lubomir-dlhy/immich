@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getAssetMediaUrl } from '$lib/utils';
+  import { getAssetMediaUrl } from '#lib/utils.ts';
   import { AssetMediaSize, type PetResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiPaw } from '@mdi/js';
