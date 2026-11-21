@@ -1,22 +1,23 @@
 <script lang="ts">
-  import { shortcut } from '$lib/actions/shortcut';
-  import ImageThumbnail from '$lib/components/assets/thumbnail/ImageThumbnail.svelte';
-  import PetThumbnail from '$lib/components/pets/PetThumbnail.svelte';
-  import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
-  import { eventManager } from '$lib/managers/event-manager.svelte';
-  import FaceCreateTagModal from '$lib/modals/CreateFaceModal.svelte';
-  import { faceManager } from '$lib/stores/face.svelte';
-  import { petManager } from '$lib/stores/pet.svelte';
-  import { getPeopleThumbnailUrl } from '$lib/utils';
-  import { getNaturalSize, scaleToFit } from '$lib/utils/container-utils';
-  import { handleError } from '$lib/utils/handle-error';
-  import { normalizeSearchString } from '$lib/utils/string-utils';
+  import { shortcut } from '#lib/actions/shortcut.ts';
+  import ImageThumbnail from '#lib/components/assets/thumbnail/ImageThumbnail.svelte';
+  import PetThumbnail from '#lib/components/pets/PetThumbnail.svelte';
+  import { assetViewerManager } from '#lib/managers/asset-viewer-manager.svelte.ts';
+  import { eventManager } from '#lib/managers/event-manager.svelte.ts';
+  import FaceCreateTagModal from '#lib/modals/CreateFaceModal.svelte';
+  import { executeMutation } from '#lib/queries/client.ts';
+  import { createFaceMutation } from '#lib/queries/face.query.ts';
+  import { faceManager } from '#lib/stores/face.svelte.ts';
+  import { petManager } from '#lib/stores/pet.svelte.ts';
+  import { getPeopleThumbnailUrl } from '#lib/utils.ts';
+  import { getNaturalSize, scaleToFit } from '#lib/utils/container-utils.ts';
+  import { handleError } from '#lib/utils/handle-error.ts';
+  import { normalizeSearchString } from '#lib/utils/string-utils.ts';
   import {
+    Species,
     createAssetPet,
-    createFace,
     getAllPeople,
     getPets,
-    Species,
     type PersonResponseDto,
     type PetResponseDto,
   } from '@immich/sdk';
@@ -329,38 +330,29 @@
   };
 
   const tagFace = async (person: PersonResponseDto) => {
-    try {
-      const data = getFaceCroppedCoordinates();
-      if (!data) {
-        toastManager.warning($t('error_tag_face_bounding_box'));
-        return;
-      }
+    const data = getFaceCroppedCoordinates();
+    if (!data) {
+      toastManager.warning($t('error_tag_face_bounding_box'));
+      return;
+    }
 
-      const isConfirmed = await modalManager.showDialog({
-        prompt: person.name
-          ? $t('confirm_tag_face', { values: { name: person.name } })
-          : $t('confirm_tag_face_unnamed'),
-      });
+    const isConfirmed = await modalManager.showDialog({
+      prompt: person.name ? $t('confirm_tag_face', { values: { name: person.name } }) : $t('confirm_tag_face_unnamed'),
+    });
 
-      if (!isConfirmed) {
-        return;
-      }
+    if (!isConfirmed) {
+      return;
+    }
 
-      await createFace({
-        assetFaceCreateDto: {
-          assetId,
-          personId: person.id,
-          ...data,
-        },
-      });
-
+    const onSuccess = async () => {
       await assetViewerManager.setAssetId(assetId);
       faceManager.clear();
-      onClose();
-    } catch (error) {
-      handleError(error, 'Error tagging face');
-      onClose();
-    }
+    };
+
+    await executeMutation(createFaceMutation, [{ assetFaceCreateDto: { assetId, personId: person.id, ...data } }], {
+      onSuccess: () => void onSuccess(),
+      onSettled: onClose,
+    });
   };
 
   const tagPet = async (pet: PetResponseDto) => {
@@ -446,7 +438,7 @@
 <svelte:document use:shortcut={{ shortcut: { key: 'Escape' }, onShortcut: onClose, ignoreInputFields: false }} />
 
 <div
-  id="face-editor-data"
+  data-testid="face-editor-data"
   class="absolute inset-s-0 top-0 z-5 size-full overflow-hidden"
   data-overlay-interactive
   data-face-left={faceBoxPosition.left}
@@ -454,10 +446,10 @@
   data-face-width={faceBoxPosition.width}
   data-face-height={faceBoxPosition.height}
 >
-  <canvas bind:this={canvasEl} id="face-editor" class="absolute inset-s-0 top-0"></canvas>
+  <canvas bind:this={canvasEl} data-testid="face-editor" class="absolute inset-s-0 top-0"></canvas>
 
   <div
-    id="face-selector"
+    data-testid="face-selector"
     bind:this={faceSelectorEl}
     class="absolute inset-s-[calc(50%-125px)] top-[calc(50%-250px)] w-62.5 max-w-62.5 rounded-xl border border-gray-200 bg-white px-2 py-4 backdrop-blur-sm transition-[top,left] duration-200 ease-out dark:border-gray-800 dark:bg-immich-dark-gray dark:text-immich-dark-fg"
   >

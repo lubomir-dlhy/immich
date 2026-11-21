@@ -18,6 +18,7 @@ describe(AlbumService.name, () => {
 
   beforeEach(() => {
     ({ sut, mocks } = newTestService(AlbumService));
+    mocks.album.getMetadataForIds.mockResolvedValue([]);
   });
 
   it('should work', () => {
@@ -599,7 +600,7 @@ describe(AlbumService.name, () => {
 
       expect(mocks.albumUser.delete).toHaveBeenCalledTimes(1);
       expect(mocks.albumUser.delete).toHaveBeenCalledWith({ albumId: album.id, userId });
-      expect(mocks.album.getById).toHaveBeenCalledWith(album.id, { withAssets: false }, owner.id);
+      expect(mocks.album.getById).toHaveBeenCalledWith(album.id, owner.id);
     });
 
     it('should prevent removing a shared user from a not-owned album (shared with auth user)', async () => {
@@ -701,7 +702,7 @@ describe(AlbumService.name, () => {
 
       await sut.get(AuthFactory.create(owner), album.id);
 
-      expect(mocks.album.getById).toHaveBeenCalledWith(album.id, { withAssets: false }, owner.id);
+      expect(mocks.album.getById).toHaveBeenCalledWith(album.id, owner.id);
       expect(mocks.access.album.checkOwnerAccess).toHaveBeenCalledWith(owner.id, new Set([album.id]));
     });
 
@@ -720,10 +721,12 @@ describe(AlbumService.name, () => {
       ]);
 
       const auth = AuthFactory.from().sharedLink().build();
-      await sut.get(auth, album.id);
+      const result = await sut.get(auth, album.id);
 
-      expect(mocks.album.getById).toHaveBeenCalledWith(album.id, { withAssets: false }, auth.user.id);
+      expect(mocks.album.getById).toHaveBeenCalledWith(album.id, auth.user.id);
       expect(mocks.access.album.checkSharedLinkAccess).toHaveBeenCalledWith(auth.sharedLink!.id, new Set([album.id]));
+      expect(result).toMatchObject({ albumUsers: [], shared: true, contributorCounts: undefined });
+      expect(mocks.album.getContributorCounts).not.toHaveBeenCalled();
     });
 
     it('should get a shared album via shared with user', async () => {
@@ -743,7 +746,7 @@ describe(AlbumService.name, () => {
 
       await sut.get(AuthFactory.create(user), album.id);
 
-      expect(mocks.album.getById).toHaveBeenCalledWith(album.id, { withAssets: false }, user.id);
+      expect(mocks.album.getById).toHaveBeenCalledWith(album.id, user.id);
       expect(mocks.access.album.checkSharedAlbumAccess).toHaveBeenCalledWith(
         user.id,
         new Set([album.id]),
@@ -893,6 +896,24 @@ describe(AlbumService.name, () => {
       expect(mocks.access.asset.checkPartnerAccess).toHaveBeenCalledWith(owner.id, new Set([asset.id]));
     });
 
+    it('should allow adding assets shared via album sharing', async () => {
+      const album = AlbumFactory.create();
+      const { user: owner } = album.albumUsers.find(({ role }) => role === AlbumUserRole.Owner)!;
+      const asset = AssetFactory.create();
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([album.id]));
+      mocks.access.asset.checkAlbumAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.album.getAssetIds.mockResolvedValueOnce(new Set());
+
+      await expect(sut.addAssets(AuthFactory.create(owner), album.id, { ids: [asset.id] })).resolves.toEqual([
+        { success: true, id: asset.id },
+      ]);
+
+      expect(mocks.album.addAssetIds).toHaveBeenCalledWith(album.id, [asset.id]);
+      expect(mocks.access.asset.checkOwnerAccess).toHaveBeenCalledWith(owner.id, new Set([asset.id]), false);
+      expect(mocks.access.asset.checkAlbumAccess).toHaveBeenCalledWith(owner.id, new Set([asset.id]));
+    });
+
     it('should skip duplicate assets', async () => {
       const asset = AssetFactory.create();
       const album = AlbumFactory.create();
@@ -922,6 +943,7 @@ describe(AlbumService.name, () => {
       ]);
 
       expect(mocks.access.asset.checkOwnerAccess).toHaveBeenCalledWith(owner.id, new Set([asset.id]), false);
+      expect(mocks.access.asset.checkAlbumAccess).toHaveBeenCalledWith(owner.id, new Set([asset.id]));
       expect(mocks.access.asset.checkPartnerAccess).toHaveBeenCalledWith(owner.id, new Set([asset.id]));
     });
 
@@ -1190,6 +1212,33 @@ describe(AlbumService.name, () => {
       );
     });
 
+    it('should allow adding assets shared via album sharing', async () => {
+      const user = UserFactory.create();
+      const album1 = AlbumFactory.create();
+      const { user: owner } = album1.albumUsers.find(({ role }) => role === AlbumUserRole.Owner)!;
+      const album2 = AlbumFactory.create();
+      const [asset1, asset2] = [AssetFactory.create({ ownerId: user.id }), AssetFactory.create({ ownerId: user.id })];
+      mocks.access.album.checkOwnerAccess.mockResolvedValueOnce(new Set([album1.id, album2.id]));
+      mocks.access.asset.checkAlbumAccess.mockResolvedValue(new Set([asset1.id, asset2.id]));
+      mocks.album.getById.mockResolvedValueOnce(getForAlbum(album1)).mockResolvedValueOnce(getForAlbum(album2));
+      mocks.album.getAssetIds.mockResolvedValueOnce(new Set()).mockResolvedValueOnce(new Set());
+
+      await expect(
+        sut.addAssetsToAlbums(AuthFactory.create(owner), {
+          albumIds: [album1.id, album2.id],
+          assetIds: [asset1.id, asset2.id],
+        }),
+      ).resolves.toEqual({ success: true, error: undefined });
+
+      expect(mocks.album.addAssetIdsToAlbums).toHaveBeenCalledWith([
+        { albumId: album1.id, assetId: asset1.id },
+        { albumId: album1.id, assetId: asset2.id },
+        { albumId: album2.id, assetId: asset1.id },
+        { albumId: album2.id, assetId: asset2.id },
+      ]);
+      expect(mocks.access.asset.checkAlbumAccess).toHaveBeenCalledWith(owner.id, new Set([asset1.id, asset2.id]));
+    });
+
     it('should skip some duplicate assets', async () => {
       const [asset1, asset2, asset3] = [AssetFactory.create(), AssetFactory.create(), AssetFactory.create()];
       const album1 = AlbumFactory.create();
@@ -1287,6 +1336,10 @@ describe(AlbumService.name, () => {
         new Set([asset1.id, asset2.id, asset3.id]),
         false,
       );
+      expect(mocks.access.asset.checkAlbumAccess).toHaveBeenCalledWith(
+        owner.id,
+        new Set([asset1.id, asset2.id, asset3.id]),
+      );
       expect(mocks.access.asset.checkPartnerAccess).toHaveBeenCalledWith(
         owner.id,
         new Set([asset1.id, asset2.id, asset3.id]),
@@ -1351,6 +1404,23 @@ describe(AlbumService.name, () => {
       ]);
 
       expect(mocks.album.removeAssetIds).toHaveBeenCalledWith(album.id, [asset.id]);
+    });
+
+    it('should allow a shared user to remove assets shared via album sharing', async () => {
+      const user = UserFactory.create();
+      const album = AlbumFactory.from().albumUser({ userId: user.id, role: AlbumUserRole.Editor }).build();
+      const asset = AssetFactory.create();
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([album.id]));
+      mocks.access.asset.checkAlbumAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.album.getAssetIds.mockResolvedValue(new Set([asset.id]));
+
+      await expect(sut.removeAssets(AuthFactory.create(user), album.id, { ids: [asset.id] })).resolves.toEqual([
+        { success: true, id: asset.id },
+      ]);
+
+      expect(mocks.album.removeAssetIds).toHaveBeenCalledWith(album.id, [asset.id]);
+      expect(mocks.access.asset.checkAlbumAccess).toHaveBeenCalledWith(user.id, new Set([asset.id]));
     });
 
     it('should skip assets not in the album', async () => {

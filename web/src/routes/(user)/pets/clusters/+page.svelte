@@ -1,9 +1,6 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import PetThumbnail from '$lib/components/pets/PetThumbnail.svelte';
-  import { Route } from '$lib/route';
-  import { select } from 'd3-selection';
-  import { zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from 'd3-zoom';
+  import PetThumbnail from '#lib/components/pets/PetThumbnail.svelte';
+  import { Route } from '#lib/route.ts';
   import type { PetClusterPointDto } from '@immich/sdk';
   import { Icon, IconButton } from '@immich/ui';
   import {
@@ -16,8 +13,11 @@
     mdiMinus,
     mdiPlus,
   } from '@mdi/js';
+  import { select } from 'd3-selection';
+  import { zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from 'd3-zoom';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { goto } from '$app/navigation';
   import type { PageData } from './$types';
 
   interface Props {
@@ -399,7 +399,7 @@
               {$t('recognition_threshold')} · {data.clusterMap.recognitionThreshold.toFixed(3)}
             </text>
             {#each selectedNeighbors as neighbor (neighbor.point!.id)}
-              {@const neighborPosition = positionFor(neighbor.point)}
+              {const neighborPosition = $derived(positionFor(neighbor.point))}
               <line
                 x1={width / 2}
                 y1={height / 2}
@@ -424,9 +424,9 @@
           {/if}
 
           {#each renderedPoints as point (point.id)}
-            {@const isSelected = point.id === selectedId}
-            {@const position = positionFor(point)}
-            {@const nodeRadius = radius(point.assetCount) + (isSelected ? 5 : 1)}
+            {const isSelected = $derived(point.id === selectedId)}
+            {const position = $derived(positionFor(point))}
+            {const nodeRadius = $derived(radius(point.assetCount) + (isSelected ? 5 : 1))}
             <g
               transform={`translate(${position.x},${position.y}) scale(${semanticScale})`}
               class="cursor-pointer outline-none"

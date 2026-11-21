@@ -1,14 +1,14 @@
 <script lang="ts">
-  import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
-  import PetMergeModal from '$lib/modals/PetMergeModal.svelte';
-  import { Route } from '$lib/route';
-  import { locale } from '$lib/stores/preferences.store';
+  import UserPageLayout from '#lib/components/layouts/UserPageLayout.svelte';
+  import PetMergeModal from '#lib/modals/PetMergeModal.svelte';
+  import { Route } from '#lib/route.ts';
+  import { locale } from '#lib/stores/preferences.store.ts';
   import { type PetResponseDto } from '@immich/sdk';
   import { Icon, IconButton, modalManager } from '@immich/ui';
   import { mdiChartScatterPlot, mdiEye, mdiEyeOff, mdiPawOff } from '@mdi/js';
   import { t } from 'svelte-i18n';
-  import PetCard from './PetCard.svelte';
   import type { PageData } from './$types';
+  import PetCard from './PetCard.svelte';
 
   interface Props {
     data: PageData;

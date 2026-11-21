@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Insertable } from 'kysely';
 import sanitize from 'sanitize-filename';
-import type { ClassConstructor } from 'src/types.js';
 import { SALT_ROUNDS } from 'src/constants.js';
 import { StorageCore } from 'src/cores/storage.core.js';
 import { UserAdmin } from 'src/database.js';
+import { mapLoginResponse } from 'src/dtos/auth.dto.js';
 import { SystemConfig } from 'src/dtos/config.dto.js';
 import { AccessRepository } from 'src/repositories/access.repository.js';
 import { ActivityRepository } from 'src/repositories/activity.repository.js';
@@ -16,6 +16,7 @@ import { AssetEditRepository } from 'src/repositories/asset-edit.repository.js';
 import { AssetFileRepository } from 'src/repositories/asset-file.repository.js';
 import { AssetJobRepository } from 'src/repositories/asset-job.repository.js';
 import { AssetRepository } from 'src/repositories/asset.repository.js';
+import { AuthChallengeRepository } from 'src/repositories/auth-challenge.repository.js';
 import { ClusterGroupRepository } from 'src/repositories/cluster-group.repository.js';
 import { ConfigRepository } from 'src/repositories/config.repository.js';
 import { CronRepository } from 'src/repositories/cron.repository.js';
@@ -39,6 +40,7 @@ import { NotificationRepository } from 'src/repositories/notification.repository
 import { OAuthRepository } from 'src/repositories/oauth.repository.js';
 import { OcrRepository } from 'src/repositories/ocr.repository.js';
 import { PartnerRepository } from 'src/repositories/partner.repository.js';
+import { PasskeyRepository } from 'src/repositories/passkey.repository.js';
 import { PersonUserRepository } from 'src/repositories/person-user.repository.js';
 import { PersonRepository } from 'src/repositories/person.repository.js';
 import { PetRepository } from 'src/repositories/pet.repository.js';
@@ -61,9 +63,12 @@ import { UserRepository } from 'src/repositories/user.repository.js';
 import { VersionHistoryRepository } from 'src/repositories/version-history.repository.js';
 import { VideoStreamRepository } from 'src/repositories/video-stream.repository.js';
 import { ViewRepository } from 'src/repositories/view-repository.js';
+import { WebAuthnRepository } from 'src/repositories/webauthn.repository.js';
 import { WebsocketRepository } from 'src/repositories/websocket.repository.js';
 import { WorkflowRepository } from 'src/repositories/workflow.repository.js';
 import { UserTable } from 'src/schema/tables/user.table.js';
+import type { LoginDetails } from 'src/services/auth.service.js';
+import type { ClassConstructor } from 'src/types.js';
 import {
   AccessPersonRequest,
   AccessRequest,
@@ -86,6 +91,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   AssetEditRepository,
   AssetFileRepository,
   AssetJobRepository,
+  AuthChallengeRepository,
   ClusterGroupRepository,
   ConfigRepository,
   CronRepository,
@@ -108,6 +114,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   OAuthRepository,
   OcrRepository,
   PartnerRepository,
+  PasskeyRepository,
   PersonRepository,
   PetRepository,
   PersonUserRepository,
@@ -130,6 +137,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   VersionHistoryRepository,
   VideoStreamRepository,
   ViewRepository,
+  WebAuthnRepository,
   WebsocketRepository,
   WorkflowRepository,
 ] as const;
@@ -150,6 +158,7 @@ export class BaseService {
     protected assetEditRepository: AssetEditRepository,
     protected assetFileRepository: AssetFileRepository,
     protected assetJobRepository: AssetJobRepository,
+    protected authChallengeRepository: AuthChallengeRepository,
     protected clusterGroupRepository: ClusterGroupRepository,
     protected configRepository: ConfigRepository,
     protected cronRepository: CronRepository,
@@ -172,6 +181,7 @@ export class BaseService {
     protected oauthRepository: OAuthRepository,
     protected ocrRepository: OcrRepository,
     protected partnerRepository: PartnerRepository,
+    protected passkeyRepository: PasskeyRepository,
     protected personRepository: PersonRepository,
     protected petRepository: PetRepository,
     protected personUserRepository: PersonUserRepository,
@@ -194,6 +204,7 @@ export class BaseService {
     protected versionRepository: VersionHistoryRepository,
     protected videoStreamRepository: VideoStreamRepository,
     protected viewRepository: ViewRepository,
+    protected webAuthnRepository: WebAuthnRepository,
     protected websocketRepository: WebsocketRepository,
     protected workflowRepository: WorkflowRepository,
   ) {
@@ -223,6 +234,7 @@ export class BaseService {
       ctx.assetEditRepository,
       ctx.assetFileRepository,
       ctx.assetJobRepository,
+      ctx.authChallengeRepository,
       ctx.clusterGroupRepository,
       ctx.configRepository,
       ctx.cronRepository,
@@ -245,6 +257,7 @@ export class BaseService {
       ctx.oauthRepository,
       ctx.ocrRepository,
       ctx.partnerRepository,
+      ctx.passkeyRepository,
       ctx.personRepository,
       ctx.petRepository,
       ctx.personUserRepository,
@@ -267,6 +280,7 @@ export class BaseService {
       ctx.versionRepository,
       ctx.videoStreamRepository,
       ctx.viewRepository,
+      ctx.webAuthnRepository,
       ctx.websocketRepository,
       ctx.workflowRepository,
     );
@@ -351,5 +365,27 @@ export class BaseService {
     await this.eventRepository.emit('UserCreate', user);
 
     return user;
+  }
+
+  protected async createLoginResponse(
+    user: UserAdmin,
+    loginDetails: LoginDetails,
+    oauthSid?: string,
+    oauthBearerToken?: string,
+  ) {
+    const token = this.cryptoRepository.randomBytesAsText(32);
+    const hashed = this.cryptoRepository.hashSha256(token);
+
+    await this.sessionRepository.create({
+      token: hashed,
+      deviceOS: loginDetails.deviceOS,
+      deviceType: loginDetails.deviceType,
+      appVersion: loginDetails.appVersion,
+      userId: user.id,
+      oauthSid: oauthSid ?? null,
+      oauthBearerToken: oauthBearerToken ?? null,
+    });
+
+    return mapLoginResponse(user, token);
   }
 }
