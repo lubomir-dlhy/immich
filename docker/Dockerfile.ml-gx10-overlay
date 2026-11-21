@@ -1,8 +1,21 @@
 ARG BASE_IMAGE=immich-machine-learning:v3.3.5-pet6-cuda-arm64
 
+FROM python:3.13-bookworm AS wheels
+
+COPY --from=ghcr.io/astral-sh/uv:0.8.15 /uv /bin/uv
+COPY machine-learning/pyproject.toml machine-learning/uv.lock /src/
+# onnxruntime stays the CUDA build compiled into the base image
+RUN cd /src && \
+    uv export --frozen --extra cpu --no-dev --no-hashes --no-emit-project --no-header \
+      | grep -v '^onnxruntime' > requirements.txt && \
+    pip wheel --no-deps -r requirements.txt -w /wheels
+
 FROM ${BASE_IMAGE}
 
-# Reuse the already-built GX10 CUDA/ONNX Runtime image and overlay only the
-# machine-learning application from this fork.
+# Reuse the already-built GX10 CUDA/ONNX Runtime image and overlay the locked
+# Python packages and the machine-learning application from this fork.
+RUN --mount=type=bind,from=wheels,source=/wheels,target=/tmp/wheels \
+    --mount=type=bind,from=wheels,source=/bin/uv,target=/tmp/uv \
+    /tmp/uv pip install --python /opt/venv/bin/python --no-deps --no-index --no-cache /tmp/wheels/*.whl
 COPY machine-learning/immich_ml /usr/src/immich_ml
 COPY machine-learning/scripts/healthcheck.py /usr/src/healthcheck.py
